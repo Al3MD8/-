@@ -418,25 +418,47 @@ window.openAnimeDetails = async function(animeId) {
   const relGrid = document.getElementById('detailsRelationsGrid');
   relGrid.innerHTML = '<div class="spinner"></div>';
   
-  const [witanimeEps, apiEps, anilistId] = await Promise.all([
-    getWitanimeEpisodes(anime),
-    fetchAnimeEpisodes(anime.mal_id),
-    state.activeAnime.anilistId ? Promise.resolve(state.activeAnime.anilistId) : getAnilistId(anime.mal_id)
-  ]);
-  
-  // Process episodes
-  state.activeAnime.anilistId = anilistId;
-  let episodes = witanimeEps || apiEps;
+  // Optimistic Instant Episodes Rendering
   const total = anime.episodes || 0;
-  if(episodes.length === 0 && total > 0) episodes = Array.from({length: total}, (_,i) => ({mal_id:i+1, title:'الحلقة '+(i+1)}));
-  if(episodes.length === 0) episodes = Array.from({length: 12}, (_,i) => ({mal_id:i+1, title:'الحلقة '+(i+1)}));
-  state.activeAnime.fetchedEpisodes = episodes;
+  let initialEps = [];
+  if (total > 0) {
+    initialEps = Array.from({length: total}, (_,i) => ({mal_id:i+1, title:'الحلقة '+(i+1)}));
+  } else {
+    initialEps = Array.from({length: 12}, (_,i) => ({mal_id:i+1, title:'الحلقة '+(i+1)}));
+  }
+  state.activeAnime.fetchedEpisodes = initialEps;
   
-  grid.innerHTML = episodes.map((ep,idx) => `
+  // Render episodes grid instantly!
+  grid.innerHTML = initialEps.map((ep,idx) => `
     <button class="ep-card-btn" onclick="openPlayerView(${idx})">
       <i class="fa-solid fa-play-circle"></i> الحلقة ${idx+1}
     </button>
   `).join('');
+
+  // Fetch detailed data asynchronously in the background
+  (async () => {
+    try {
+      const [witanimeEps, apiEps, anilistId] = await Promise.all([
+        window.getWitanimeEpisodes(anime).catch(() => []),
+        fetchAnimeEpisodes(anime.mal_id).catch(() => []),
+        state.activeAnime.anilistId ? Promise.resolve(state.activeAnime.anilistId) : getAnilistId(anime.mal_id).catch(() => null)
+      ]);
+      
+      state.activeAnime.anilistId = anilistId;
+      
+      let finalEps = witanimeEps && witanimeEps.length > 0 ? witanimeEps : (apiEps && apiEps.length > 0 ? apiEps : initialEps);
+      state.activeAnime.fetchedEpisodes = finalEps;
+      
+      // Update grid dynamically with real titles if any changed, keeping the click index intact
+      grid.innerHTML = finalEps.map((ep,idx) => `
+        <button class="ep-card-btn" onclick="openPlayerView(${idx})">
+          <i class="fa-solid fa-play-circle"></i> ${ep.title || 'الحلقة '+(idx+1)}
+        </button>
+      `).join('');
+    } catch(e) {
+      console.warn("Background episodes load error:", e);
+    }
+  })();
 
   // Process Relations (Sequels / Prequels) with Rich Posters
   try {
@@ -543,10 +565,23 @@ window.openPlayerView = async function(epIndex) {
   
   if(episode.url && episode.url.includes('witanime')) {
     try {
-      const resp = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(episode.url));
-      if(resp.ok) {
-        const data = await resp.json();
-        const html = data.contents;
+      let html = '';
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port;
+      
+      if (isLocal) {
+        const resp = await fetch('/api/proxy?url=' + encodeURIComponent(episode.url));
+        if (resp.ok) {
+          html = await resp.text();
+        }
+      } else {
+        const resp = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(episode.url));
+        if (resp.ok) {
+          const data = await resp.json();
+          html = data.contents || '';
+        }
+      }
+      
+      if (html) {
         const zG_m = html.match(/var _zG\s*=\s*"([^"]+)";/);
         const zH_m = html.match(/var _zH\s*=\s*"([^"]+)";/);
         if(zG_m && zH_m) {
@@ -562,7 +597,9 @@ window.openPlayerView = async function(epIndex) {
           }
         }
       }
-    } catch(e) {}
+    } catch(e) {
+      console.warn("Failed to load Witanime servers:", e);
+    }
   }
 
   if(servers.length === 0) {
@@ -1266,5 +1303,188 @@ window.renderLatestEpisodes = async function() {
   } catch(e) {
     console.error("Latest episodes render failed:", e);
     grid.innerHTML = '<p style="color:var(--text-sub); text-align:center;">تعذر تحميل الحلقات</p>';
+  }
+};
+
+// ===== FAST DYNAMIC WITANIME SCRAPER & DECRYPTOR OVERRIDE =====
+window.getWitanimeEpisodes = async function(anime) {
+  const searchTitles = [];
+  if (anime.title) searchTitles.push(anime.title);
+  if (anime.title_english) searchTitles.push(anime.title_english);
+  
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port;
+
+  async function fetchHTML(url) {
+    if (isLocal) {
+      const res = await fetch('/api/proxy?url=' + encodeURIComponent(url));
+      if (res.ok) return await res.text();
+    } else {
+      const res = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(url));
+      if (res.ok) {
+        const d = await res.json();
+        return d.contents || '';
+      }
+    }
+    throw new Error('Fetch failed');
+  }
+
+  for (const title of searchTitles.slice(0, 2)) {
+    try {
+      const searchUrl = `https://witanime.you/?search_param=animes&s=${encodeURIComponent(title)}`;
+      const html = await fetchHTML(searchUrl);
+      const regex = /<a\s+href="(https:\/\/witanime\.you\/anime\/[^"]+)"\s+class="overlay"><\/a>/i;
+      const match = html.match(regex);
+      if (match && match[1]) {
+        const animeUrl = match[1];
+        const animeHtml = await fetchHTML(animeUrl);
+        const epDataMatch = animeHtml.match(/var\s+processedEpisodeData\s*=\s*'([^']+)';/);
+        if (epDataMatch && epDataMatch[1]) {
+          const decryptedEpisodes = decryptWitanimeEpisodes(epDataMatch[1]);
+          if (decryptedEpisodes && decryptedEpisodes.length > 0) {
+            const firstNum = parseInt(decryptedEpisodes[0].number);
+            const lastNum = parseInt(decryptedEpisodes[decryptedEpisodes.length - 1].number);
+            if (firstNum > lastNum) {
+              decryptedEpisodes.reverse();
+            }
+            return decryptedEpisodes;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`Fast Witanime extraction failed for title "${title}":`, e);
+    }
+  }
+  return [];
+};
+
+// ===== USER PROFILE EDITOR CONTROLLER (NEW FEATURE) =====
+let profileSelectedAvatar = '';
+
+window.toggleProfileEdit = function(show = true) {
+  const container = document.getElementById('profileEditContainer');
+  const btnShow = document.getElementById('btnShowProfileEdit');
+  const usernameInput = document.getElementById('profileEditUsernameInput');
+  const errEl = document.getElementById('profileEditError');
+
+  if (!container || !btnShow) return;
+
+  if (show) {
+    container.style.display = 'flex';
+    btnShow.style.display = 'none';
+    errEl.style.display = 'none';
+    usernameInput.value = userState.username || '';
+    profileSelectedAvatar = userState.avatar || '';
+    
+    // Highlight currently active avatar
+    document.querySelectorAll('.profile-avatar-option-img').forEach(img => {
+      const active = img.dataset.avatar === profileSelectedAvatar;
+      img.style.borderColor = active ? 'var(--accent-color)' : 'transparent';
+      img.style.transform = active ? 'scale(1.1)' : 'scale(1)';
+      img.style.boxShadow = active ? '0 0 10px var(--accent-color)' : 'none';
+    });
+  } else {
+    container.style.display = 'none';
+    btnShow.style.display = 'block';
+  }
+};
+
+// Bind clicks on custom avatars
+document.addEventListener('click', (e) => {
+  if (e.target.classList.contains('profile-avatar-option-img')) {
+    profileSelectedAvatar = e.target.dataset.avatar;
+    document.querySelectorAll('.profile-avatar-option-img').forEach(img => {
+      const active = img.dataset.avatar === profileSelectedAvatar;
+      img.style.borderColor = active ? 'var(--accent-color)' : 'transparent';
+      img.style.transform = active ? 'scale(1.1)' : 'scale(1)';
+      img.style.boxShadow = active ? '0 0 10px var(--accent-color)' : 'none';
+    });
+  }
+});
+
+window.saveProfileChanges = async function() {
+  const newUsername = document.getElementById('profileEditUsernameInput').value.trim();
+  const errEl = document.getElementById('profileEditError');
+  
+  if (!newUsername) {
+    errEl.textContent = 'اسم المستخدم لا يمكن أن يكون فارغاً';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  try {
+    let success = false;
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port;
+
+    if (isLocal) {
+      // Direct call to our custom PowerShell update endpoint!
+      const res = await fetch('/api/auth/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: userState.userId,
+          username: newUsername,
+          avatar: profileSelectedAvatar
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        userState.username = data.user.username;
+        userState.avatar = data.user.avatar;
+        success = true;
+      } else {
+        errEl.textContent = data.error || 'اسم المستخدم محجوز بالفعل';
+        errEl.style.display = 'block';
+        return;
+      }
+    }
+
+    // Sync localStorage local user db
+    const users = JSON.parse(localStorage.getItem('anime_users') || '{}');
+    if (userState.username !== newUsername && users[userState.username]) {
+      const userData = users[userState.username];
+      delete users[userState.username];
+      userData.username = newUsername;
+      userData.avatar = profileSelectedAvatar;
+      users[newUsername] = userData;
+    } else if (users[userState.username]) {
+      users[userState.username].avatar = profileSelectedAvatar;
+    } else {
+      users[newUsername] = { username: newUsername, avatar: profileSelectedAvatar, id: userState.userId || Date.now() };
+    }
+    localStorage.setItem('anime_users', JSON.stringify(users));
+
+    if (!success) {
+      // Offline fallback
+      userState.username = newUsername;
+      userState.avatar = profileSelectedAvatar;
+    }
+
+    // Sync session
+    localStorage.setItem('user_profile', JSON.stringify({
+      username: userState.username,
+      avatar: userState.avatar,
+      userId: userState.userId
+    }));
+
+    // Dynamic UI Update
+    document.getElementById('profileViewAvatar').src = userState.avatar;
+    document.getElementById('profileViewUsername').textContent = userState.username;
+    
+    if (typeof renderProfileCard === 'function') renderProfileCard();
+    if (typeof updateHeaderProfile === 'function') updateHeaderProfile();
+    updateCommentFormVisibility();
+
+    window.toggleProfileEdit(false);
+
+    // GORGEOUS dynamic header alert animation!
+    const titleEl = document.getElementById('authModalTitle');
+    const originalHTML = titleEl.innerHTML;
+    titleEl.innerHTML = '<i class="fa-solid fa-circle-check" style="color:#00FF66; filter:drop-shadow(0 0 5px #00FF66);"></i> تم الحفظ بنجاح!';
+    setTimeout(() => { titleEl.innerHTML = originalHTML; }, 2000);
+
+  } catch (e) {
+    errEl.textContent = 'حدث خطأ أثناء الاتصال بالسيرفر';
+    errEl.style.display = 'block';
+    console.error(e);
   }
 };

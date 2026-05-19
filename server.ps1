@@ -145,6 +145,39 @@ while ($listener.IsListening) {
             }
             continue
         }
+
+        # ============ AUTH API: Update Profile ============
+        if ($requestUrl -eq "/api/auth/update" -and $method -eq "POST") {
+            $body = Get-RequestBody $context.Request
+            $data = $body | ConvertFrom-Json
+            $users = Read-JsonFile $usersFile
+            if (-not $users) { $users = @() }
+            if ($users.GetType().Name -ne "Object[]") { $users = @($users) }
+            
+            $user = $users | Where-Object { $_.id -eq $data.userId }
+            if ($user) {
+                if ($data.username) {
+                    $existing = $users | Where-Object { $_.username -eq $data.username -and $_.id -ne $data.userId }
+                    if ($existing) {
+                        Send-JsonResponse $response @{ success = $false; error = "Username already exists" } 400
+                        continue
+                    }
+                    $user.username = $data.username
+                }
+                if ($data.avatar) {
+                    $user.avatar = $data.avatar
+                }
+                if ($data.password) {
+                    $user.password = $data.password
+                }
+                Write-JsonFile $usersFile $users
+                Send-JsonResponse $response @{ success = $true; user = @{ id = $user.id; username = $user.username; avatar = $user.avatar } }
+            } else {
+                Send-JsonResponse $response @{ success = $false; error = "User not found" } 404
+            }
+            continue
+        }
+        
         
         # ============ COMMENTS API: Get ============
         if ($requestUrl -match "^/api/comments/(.+)$" -and $method -eq "GET") {

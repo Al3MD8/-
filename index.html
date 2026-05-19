@@ -304,8 +304,32 @@
 
         <!-- Profile View (Shown when logged in) -->
         <div id="profileViewSection" style="display:none; text-align:center; padding:10px;">
-          <img id="profileViewAvatar" src="" style="width:80px;height:80px;border-radius:50%;margin-bottom:15px;border:3px solid var(--accent-color);">
+          <img id="profileViewAvatar" src="" style="width:80px;height:80px;border-radius:50%;margin-bottom:15px;border:3px solid var(--accent-color); cursor:pointer;" onclick="toggleProfileEdit(true)">
           <h3 id="profileViewUsername" style="font-size:1.2rem;margin-bottom:20px;color:white;"></h3>
+          
+          <!-- Edit Form Container (NEW FEATURE) -->
+          <div id="profileEditContainer" style="display:none; flex-direction:column; gap:12px; margin-bottom:20px; text-align:right;">
+            <label style="font-size:0.85rem;font-weight:700;color:var(--text-sub);">اسم المستخدم الجديد:</label>
+            <input type="text" id="profileEditUsernameInput" style="padding:10px 14px;background:rgba(26,29,46,0.5);border:1px solid var(--border-glass);border-radius:10px;color:white;font-family:inherit;width:100%;">
+            
+            <label style="font-size:0.85rem;font-weight:700;color:var(--text-sub);margin-top:5px;display:block;">اختر صورة رمزية للأنمي:</label>
+            <div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+              <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Luffy" class="profile-avatar-option-img" data-avatar="https://api.dicebear.com/7.x/bottts/svg?seed=Luffy" style="width:40px;height:40px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:0.2s;">
+              <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Zoro" class="profile-avatar-option-img" data-avatar="https://api.dicebear.com/7.x/bottts/svg?seed=Zoro" style="width:40px;height:40px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:0.2s;">
+              <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Naruto" class="profile-avatar-option-img" data-avatar="https://api.dicebear.com/7.x/bottts/svg?seed=Naruto" style="width:40px;height:40px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:0.2s;">
+              <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Goku" class="profile-avatar-option-img" data-avatar="https://api.dicebear.com/7.x/bottts/svg?seed=Goku" style="width:40px;height:40px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:0.2s;">
+              <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Sasuke" class="profile-avatar-option-img" data-avatar="https://api.dicebear.com/7.x/bottts/svg?seed=Sasuke" style="width:40px;height:40px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:0.2s;">
+              <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Sakura" class="profile-avatar-option-img" data-avatar="https://api.dicebear.com/7.x/bottts/svg?seed=Sakura" style="width:40px;height:40px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:0.2s;">
+            </div>
+            
+            <p id="profileEditError" style="color:#ff6b6b;font-size:0.85rem;display:none;text-align:center;"></p>
+            <div style="display:flex;gap:10px;">
+              <button class="btn btn-primary" onclick="saveProfileChanges()" style="flex:1;padding:10px;font-size:0.9rem;background:var(--accent-color);"><i class="fa-solid fa-check"></i> حفظ</button>
+              <button class="btn btn-secondary" onclick="toggleProfileEdit(false)" style="padding:10px;font-size:0.9rem;background:rgba(255,255,255,0.05);color:white;border:1px solid var(--border-glass);"><i class="fa-solid fa-xmark"></i> إلغاء</button>
+            </div>
+          </div>
+          
+          <button class="btn btn-primary" id="btnShowProfileEdit" onclick="toggleProfileEdit(true)" style="width:100%;padding:12px;margin-bottom:12px;background:var(--accent-color);"><i class="fa-solid fa-user-pen"></i> تعديل الحساب</button>
           <button class="btn btn-secondary" onclick="handleLogout()" style="width:100%;padding:12px;background:#ff4757;color:white;border-color:#ff4757;"><i class="fa-solid fa-arrow-right-from-bracket"></i> تسجيل الخروج</button>
         </div>
       </div>
