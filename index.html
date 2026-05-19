@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>فضاء الأنمي | Anime Space</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="style.css?v=6.0">
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <script type="module" src="https://unpkg.com/emoji-picker-element@1"></script>
+</head>
+<body>
+  <div class="glow-light light-purple"></div>
+  <div class="glow-light light-pink"></div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"><div class="toast-content"><i class="fa-solid fa-circle-check toast-icon"></i><span id="toastText" class="toast-text"></span></div></div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-container" style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+      <div class="header-controls" style="display:flex;align-items:center;gap:12px;">
+        <button class="sidebar-toggle-btn" id="sidebarToggleBtn"><i class="fa-solid fa-bars-staggered"></i></button>
+        <button class="header-profile-btn" id="headerProfileBtn" style="display:none;" onclick="openAuthModal()"><img src="" id="headerAvatar" alt="avatar" class="header-avatar-img"></button>
+      </div>
+      
+      <!-- Desktop Nav Navbar (Hidden on mobile) -->
+      <nav class="desktop-nav" style="display:flex; gap:25px; align-items:center; flex:1; justify-content:center;">
+        <a href="#" onclick="switchView('homeView')" style="color:white;text-decoration:none;font-weight:700;font-size:1.05rem;transition:0.3s;" onmouseover="this.style.color='var(--accent-color)'" onmouseout="this.style.color='white'"><i class="fa-solid fa-house"></i> الرئيسية</a>
+        <a href="#" onclick="switchView('browseView'); renderBrowsePage();" style="color:white;text-decoration:none;font-weight:700;font-size:1.05rem;transition:0.3s;" onmouseover="this.style.color='var(--accent-color)'" onmouseout="this.style.color='white'"><i class="fa-solid fa-compass"></i> تصفح الأنميات</a>
+        <a href="#" onclick="switchView('savedView'); renderSavedAnimeSPA();" style="color:white;text-decoration:none;font-weight:700;font-size:1.05rem;transition:0.3s;" onmouseover="this.style.color='var(--accent-color)'" onmouseout="this.style.color='white'"><i class="fa-solid fa-bookmark"></i> قائمتي</a>
+      </nav>
+
+      <div class="logo" style="margin-left: 20px;"><a href="#" id="logoLink" class="logo-icon" onclick="switchView('homeView')"><i class="fa-solid fa-meteor"></i> فضاء <span class="highlight">الأنمي</span></a></div>
+      <div class="search-box">
+        <i class="fa-solid fa-magnifying-glass search-icon"></i>
+        <input type="text" id="searchInput" placeholder="بحث سريع...">
+        <button class="clear-search-btn" id="clearSearchBtn" style="display:none;"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== HOME VIEW ===== -->
+  <div id="homeView" class="spa-view active" style="display:block;">
+    <section id="home" class="hero-section">
+      <div class="hero-banner" id="heroBanner">
+        <div class="hero-overlay"></div>
+        <div class="hero-content">
+          <span class="season-badge" id="heroSeason">...</span>
+          <h1 class="hero-title" id="heroTitle">جاري تحميل الأنميات...</h1>
+          <div class="hero-meta">
+            <span class="hero-meta-item"><i class="fa-solid fa-star text-gold"></i> <span id="heroRating">-</span></span>
+            <span class="hero-meta-item"><i class="fa-solid fa-tv"></i> <span id="heroType">-</span></span>
+            <span class="hero-meta-item"><i class="fa-solid fa-film"></i> <span id="heroEpisodes">-</span></span>
+          </div>
+          <p class="hero-description" id="heroDesc">يرجى الانتظار...</p>
+          <div class="hero-buttons">
+            <button class="btn btn-primary" id="heroPlayBtn"><i class="fa-solid fa-play"></i> شاهد الآن</button>
+            <button class="btn btn-secondary" id="heroSaveBtn"><i class="fa-regular fa-bookmark"></i> حفظ</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="container">
+      <!-- Continue Watching (سجل المشاهدة) -->
+      <section id="continueWatchingSection" class="section" style="display:none;">
+        <div class="section-header">
+          <div class="section-title">
+            <i class="fa-solid fa-clock-rotate-left icon-accent" style="color:#ff69b4;"></i>
+            <h2>تابع المشاهدة</h2>
+          </div>
+        </div>
+        <div class="anime-grid" id="continueWatchingGrid"></div>
+      </section>
+
+      <!-- Latest Episodes -->
+      <section id="latestEpisodesSection" class="section">
+        <div class="section-header"><div class="section-title"><i class="fa-solid fa-circle-play icon-accent" style="color:#00a8cc;"></i><h2>آخر الحلقات المضافة</h2></div></div>
+        <div class="anime-grid" id="latestEpisodesGrid"></div>
+      </section>
+
+      <!-- Seasonal - One Row + See More -->
+      <section id="seasonal" class="section">
+        <div class="section-header" style="display:flex;justify-content:space-between;align-items:center;">
+          <div class="section-title"><i class="fa-solid fa-fire icon-accent"></i><h2>أنميات هذا الموسم</h2></div>
+          <button class="btn btn-secondary btn-sm" onclick="switchView('browseView'); renderBrowsePage();" style="padding:8px 20px;font-size:0.85rem;"><i class="fa-solid fa-arrow-left"></i> مشاهدة أكثر</button>
+        </div>
+        <div class="anime-grid" id="seasonalGrid"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ===== BROWSE VIEW (All Anime + Pagination) ===== -->
+  <div id="browseView" class="spa-view" style="display:none;padding-top:90px;min-height:100vh;">
+    <div class="container">
+      <div class="section-header"><div class="section-title"><i class="fa-solid fa-compass icon-accent"></i><h2>تصفح جميع الأنميات</h2></div></div>
+      <div class="search-box" style="max-width:500px;margin:0 auto 25px;position:relative;">
+        <i class="fa-solid fa-magnifying-glass search-icon"></i>
+        <input type="text" id="browseSearchInput" placeholder="ابحث في جميع الأنميات..." style="width:100%;padding:12px 40px 12px 15px;background:rgba(255,255,255,0.05);border:1px solid var(--border-glass);border-radius:12px;color:white;font-family:inherit;">
+      </div>
+      <div class="filters-container">
+        <div class="category-filters" id="browseFilters">
+          <button class="filter-btn active" data-genre="all">الكل</button>
+          <button class="filter-btn" data-genre="Action">أكشن</button>
+          <button class="filter-btn" data-genre="Adventure">مغامرة</button>
+          <button class="filter-btn" data-genre="Comedy">كوميديا</button>
+          <button class="filter-btn" data-genre="Fantasy">خيال</button>
+          <button class="filter-btn" data-genre="Sci-Fi">خيال علمي</button>
+          <button class="filter-btn" data-genre="Drama">دراما</button>
+          <button class="filter-btn" data-genre="Romance">رومنسي</button>
+        </div>
+      </div>
+      <div class="anime-grid" id="browseAnimeGrid"></div>
+      <div class="pagination" id="browsePagination" style="display:flex;justify-content:center;gap:8px;margin:30px 0;flex-wrap:wrap;"></div>
+    </div>
+  </div>
+
+  <!-- ===== HISTORY VIEW ===== -->
+  <div id="historyView" class="spa-view" style="display:none;padding-top:90px;min-height:100vh;">
+    <div class="container">
+      <div class="section-header"><div class="section-title"><i class="fa-solid fa-clock-rotate-left icon-accent" style="color:#ff69b4;"></i><h2>سجل المشاهدة</h2></div></div>
+      <div class="anime-grid" id="historyViewGrid"></div>
+    </div>
+  </div>
+
+  <!-- ===== SAVED VIEW ===== -->
+  <div id="savedView" class="spa-view" style="display:none;padding-top:90px;min-height:100vh;">
+    <div class="container">
+      <div class="section-header"><div class="section-title"><i class="fa-solid fa-bookmark icon-accent" style="color:#ff69b4;"></i><h2>قائمتي المحفوظة</h2></div></div>
+      <div class="anime-grid" id="savedViewGrid"></div>
+    </div>
+  </div>
+
+  <!-- ===== DETAILS VIEW ===== -->
+  <div id="detailsView" class="spa-view" style="display:none;padding-top:90px;min-height:100vh;">
+    <div class="container" style="max-width:1100px;">
+      <div style="text-align:center;margin-bottom:30px;">
+        <h1 id="detailsTitle" style="font-size:2rem;font-weight:800;margin-bottom:10px;"></h1>
+        <div id="detailsGenres" style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap;"></div>
+      </div>
+      <div style="display:flex;gap:40px;background:rgba(26,29,46,0.5);padding:30px;border-radius:16px;border:1px solid var(--border-glass);flex-wrap:wrap;">
+        <div style="flex:0 0 250px;">
+          <img id="detailsBanner" src="" alt="poster" style="width:100%;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+          <button class="btn btn-secondary" id="detailsSaveBtn" style="width:100%;margin-top:15px;"><i class="fa-regular fa-bookmark"></i> حفظ</button>
+          <a href="#" id="detailsMalLink" target="_blank" class="btn btn-secondary" style="width:100%;margin-top:10px;font-size:0.85rem;"><i class="fa-brands fa-envira"></i> MAL</a>
+        </div>
+        <div style="flex:1;min-width:300px;">
+          <p id="detailsDesc" style="font-size:1rem;line-height:1.8;margin-bottom:20px;"></p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:0.9rem;color:var(--text-sub);">
+            <div><strong>النوع:</strong> <span id="detailsType"></span></div>
+            <div><strong>الموسم:</strong> <span id="detailsSeason"></span></div>
+            <div><strong>الحالة:</strong> <span id="detailsStatus" style="color:var(--accent-color);"></span></div>
+            <div><strong>الحلقات:</strong> <span id="detailsCount"></span></div>
+            <div><strong>التقييم:</strong> <span id="detailsRating" style="color:gold;"></span></div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:40px;background:rgba(10,12,22,0.6);padding:30px;border-radius:16px;">
+        <h2 style="font-size:1.3rem;color:var(--accent-color);margin-bottom:20px;"><i class="fa-solid fa-play-circle"></i> حلقات الأنمي</h2>
+        <div id="detailsEpisodesGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== PLAYER VIEW ===== -->
+  <div id="playerView" class="spa-view" style="display:none;padding-top:0;min-height:100vh;">
+    <div style="background:rgba(10,12,22,0.98);padding:15px 40px;border-bottom:1px solid var(--border-glass);text-align:center;">
+      <h2 id="playerEpTitle" style="font-size:1.2rem;font-weight:700;"></h2>
+    </div>
+    <div style="display:flex;max-width:1400px;margin:0 auto;gap:20px;padding:20px;flex-wrap:wrap;">
+      <!-- Episodes Sidebar -->
+      <div style="flex:0 0 300px;background:rgba(26,29,46,0.6);border-radius:12px;border:1px solid var(--border-glass);display:flex;flex-direction:column;height:650px;">
+        <div style="padding:15px;border-bottom:1px solid var(--border-glass);font-weight:800;text-align:center;">الحلقات</div>
+        <div id="playerSidebarEps" style="flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:4px;"></div>
+      </div>
+      <!-- Main Player -->
+      <div style="flex:1;min-width:500px;display:flex;flex-direction:column;gap:12px;">
+        <div id="playerVideoBox" style="width:100%;background:#05070c;border-radius:12px;overflow:hidden;aspect-ratio:16/9;position:relative;border:1px solid var(--border-glass);">
+          <iframe id="mainVideoIframe" src="" frameborder="0" allowfullscreen style="width:100%;height:100%;position:absolute;inset:0;"></iframe>
+          <!-- Server Selection Overlay with blurred anime bg -->
+          <div id="serversSelectionOverlay" style="position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;justify-content:center;align-items:center;overflow:hidden;">
+            <div id="serverOverlayBg" style="position:absolute;inset:-20px;background-size:cover;background-position:center;filter:blur(25px) brightness(0.3);z-index:0;"></div>
+            <div style="position:absolute;inset:0;background:rgba(10,12,22,0.75);z-index:1;"></div>
+            <div style="position:relative;z-index:2;text-align:center;width:85%;">
+              <h3 style="color:white;margin-bottom:20px;font-size:1.3rem;"><i class="fa-solid fa-server"></i> اختر سيرفر المشاهدة</h3>
+              <div id="qualityTabs" style="display:flex;justify-content:center;gap:12px;margin-bottom:20px;">
+                <button class="quality-circle active" data-q="fhd" onclick="filterServersByQuality('fhd')">FHD</button>
+                <button class="quality-circle" data-q="hd" onclick="filterServersByQuality('hd')">HD</button>
+              </div>
+              <div id="playerServersList" style="display:flex;flex-direction:column;gap:10px;max-height:250px;overflow-y:auto;padding:10px;"></div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;gap:10px;">
+          <button class="btn btn-primary" id="btnNextEpFull" style="padding:10px 20px;"><i class="fa-solid fa-angle-left"></i> الحلقة التالية</button>
+          <button class="btn btn-secondary" id="btnBackToDetails" style="padding:10px 20px;"><i class="fa-solid fa-arrow-right"></i> تفاصيل الأنمي</button>
+          <button class="btn btn-primary" id="btnPrevEpFull" style="padding:10px 20px;">الحلقة السابقة <i class="fa-solid fa-angle-right"></i></button>
+        </div>
+        <!-- Comments Section -->
+        <div style="background:rgba(26,29,46,0.6);border-radius:12px;border:1px solid var(--border-glass);padding:20px;margin-top:10px;">
+          <h3 style="margin-bottom:15px;font-size:1.1rem;"><i class="fa-solid fa-comments" style="color:var(--accent-color);"></i> دردشة الحلقة</h3>
+          <div id="commentsContainer" style="max-height:400px;overflow-y:auto;margin-bottom:15px;display:flex;flex-direction:column;gap:12px;"></div>
+          <div id="commentFormArea" style="display:flex;flex-direction:column;gap:10px;">
+            <div id="replyingToIndicator" style="display:none; justify-content:space-between; align-items:center; background:rgba(0,168,204,0.1); padding:8px 12px; border-radius:8px; border:1px solid rgba(0,168,204,0.2);">
+              <span style="font-size:0.85rem; color:var(--accent-color);">الرد على <strong id="replyingToUsername">@username</strong></span>
+              <button onclick="cancelReply()" style="background:none; border:none; color:#ff4757; cursor:pointer; font-size:0.8rem;"><i class="fa-solid fa-xmark"></i> إلغاء</button>
+            </div>
+            
+            <div style="position:relative;">
+              <button id="emojiPickerBtn" onclick="toggleEmojiPicker()" class="btn btn-secondary" style="padding:8px 15px;font-size:1.1rem;margin-bottom:8px;"><i class="fa-regular fa-face-smile"></i> إضافة إيموجي</button>
+              <div id="emojiPickerContainer" style="display:none; position:absolute; top:45px; right:0; z-index:100; box-shadow:0 10px 25px rgba(0,0,0,0.5); border-radius:12px; overflow:hidden;">
+                <emoji-picker class="dark"></emoji-picker>
+              </div>
+            </div>
+
+            <div style="display:flex;gap:10px;align-items:flex-end;">
+              <textarea id="commentInput" placeholder="اكتب تعليقك هنا... (أو الصق صورة مباشرة!)" style="flex:1;padding:12px;background:rgba(0,0,0,0.3);border:1px solid var(--border-glass);border-radius:10px;color:white;font-family:inherit;resize:none;min-height:50px;"></textarea>
+              <label for="commentImageUpload" style="cursor:pointer;background:rgba(255,255,255,0.08);padding:12px;border-radius:10px;border:1px solid var(--border-glass);"><i class="fa-solid fa-image" style="color:var(--accent-color);font-size:1.2rem;"></i></label>
+              <input type="file" id="commentImageUpload" accept="image/*" style="display:none;">
+              <button class="btn btn-primary" onclick="submitComment()" style="padding:12px 20px;"><i class="fa-solid fa-paper-plane"></i></button>
+            </div>
+            <div id="commentImagePreview" style="display:none;position:relative;max-width:150px;">
+              <img id="commentPreviewImg" src="" style="width:100%;border-radius:8px;border:1px solid var(--border-glass);">
+              <button onclick="clearCommentImage()" style="position:absolute;top:-5px;right:-5px;background:#ff4757;color:white;border:none;width:22px;height:22px;border-radius:50%;cursor:pointer;font-size:0.7rem;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <p id="commentLoginMsg" style="display:none;color:var(--accent-color);font-size:0.85rem;text-align:center;cursor:pointer;" onclick="openAuthModal()"><i class="fa-solid fa-lock"></i> سجل دخولك أولاً للتعليق</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Legacy hidden elements for app.js compatibility -->
+  <div style="display:none;">
+    <div id="animeModal"></div><div id="modalBackdrop"></div><button id="modalCloseBtn"></button>
+    <div id="modalBanner"></div><div id="modalTitle"></div><div id="modalSubTitle"></div>
+    <div id="modalRating"></div><div id="modalSeason"></div><div id="modalStatus"></div>
+    <div id="modalDesc"></div><div id="modalGenres"></div><button id="modalSaveBtn"></button>
+    <div id="modalDate"></div><div id="modalType"></div><div id="episodesCountText"></div>
+    <div id="episodesGrid"></div><iframe id="videoIframe"></iframe><div id="serversButtons"></div>
+    <div id="serversOverlay"></div><div id="qualityBadgesOverlay"></div><div id="videoWrapper"></div>
+    <div id="playerLoading"></div><div id="playerArea"></div><span id="activeEpTitleBottom"></span>
+    <button id="nextEpisodeBtn"></button><div id="playerServersBar"></div><button id="backToServersBtn"></button>
+    <span id="savedBadge">0</span><section id="saved"><div id="savedGrid"></div></section>
+    <div id="allAnimeGrid"></div><div id="allAnimeSubtitle"></div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar-drawer" id="sidebarDrawer">
+    <div class="sidebar-drawer-overlay" id="sidebarDrawerOverlay"></div>
+    <div class="sidebar-drawer-content">
+      <div class="sidebar-drawer-header">
+        <div class="sidebar-logo"><i class="fa-solid fa-meteor highlight"></i> فضاء <span class="highlight">الأنمي</span></div>
+        <button class="sidebar-close-btn" id="sidebarCloseBtn"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="sidebar-profile-card" id="sidebarProfileCard" style="cursor:pointer;" onclick="openAuthModal()"></div>
+      <div class="sidebar-divider"></div>
+      <nav class="sidebar-nav">
+        <a href="#" class="sidebar-nav-link active" data-target="home"><i class="fa-solid fa-house"></i> الرئيسية</a>
+        <a href="#" class="sidebar-nav-link" data-target="browse"><i class="fa-solid fa-compass"></i> تصفح الأنميات</a>
+        <a href="#" class="sidebar-nav-link" data-target="saved"><i class="fa-solid fa-bookmark"></i> المحفوظة <span class="saved-badge" id="sidebarSavedBadge">0</span></a>
+        <a href="#" class="sidebar-nav-link" data-target="continueWatchingSection"><i class="fa-solid fa-clock-rotate-left"></i> سجل المشاهدة</a>
+      </nav>
+      <div class="sidebar-drawer-footer"><p>فضاء الأنمي © 2026</p></div>
+    </div>
+  </div>
+
+  <!-- Auth Modal (Login / Register / Profile) -->
+  <div class="modal" id="authModal">
+    <div class="modal-backdrop" id="authModalBackdrop"></div>
+    <div class="modal-wrapper auth-modal-wrapper" style="max-width:450px;height:auto;max-height:90vh;">
+      <div class="witanime-header" style="border-bottom:2px solid var(--secondary-color);">
+        <h2 id="authModalTitle" style="font-size:1.1rem;"><i class="fa-solid fa-user-gear highlight"></i> حسابي</h2>
+        <button class="witanime-close-btn" id="authModalCloseBtn" onclick="closeAuthModal()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      
+      <!-- Content Area -->
+      <div id="authContentArea" style="padding:25px;">
+        <!-- Tabs -->
+        <div id="authTabs" style="display:flex;gap:0;margin-bottom:20px;border-radius:10px;overflow:hidden;border:1px solid var(--border-glass);">
+          <button class="auth-tab active" onclick="showAuthTab('login')" id="tabLogin" style="flex:1;padding:10px;background:var(--accent-color);color:white;border:none;font-family:inherit;font-weight:700;cursor:pointer;">تسجيل دخول</button>
+          <button class="auth-tab" onclick="showAuthTab('register')" id="tabRegister" style="flex:1;padding:10px;background:rgba(255,255,255,0.05);color:var(--text-sub);border:none;font-family:inherit;font-weight:700;cursor:pointer;">حساب جديد</button>
+        </div>
+        <!-- Avatar (register only) -->
+        <div id="avatarSection" style="display:none;margin-bottom:15px;text-align:center;">
+          <label style="font-size:0.85rem;font-weight:700;margin-bottom:10px;display:block;">صورة الحساب:</label>
+          <div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap;">
+            <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Luffy" class="avatar-option-img active" data-avatar="https://api.dicebear.com/7.x/bottts/svg?seed=Luffy" style="width:45px;height:45px;border-radius:50%;border:2px solid transparent;cursor:pointer;">
+            <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Zoro" class="avatar-option-img" data-avatar="https://api.dicebear.com/7.x/bottts/svg?seed=Zoro" style="width:45px;height:45px;border-radius:50%;border:2px solid transparent;cursor:pointer;">
+            <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Naruto" class="avatar-option-img" data-avatar="https://api.dicebear.com/7.x/bottts/svg?seed=Naruto" style="width:45px;height:45px;border-radius:50%;border:2px solid transparent;cursor:pointer;">
+            <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Goku" class="avatar-option-img" data-avatar="https://api.dicebear.com/7.x/bottts/svg?seed=Goku" style="width:45px;height:45px;border-radius:50%;border:2px solid transparent;cursor:pointer;">
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px;" id="authInputsForm">
+          <input type="text" id="usernameInput" placeholder="اسم المستخدم" style="padding:12px 16px;background:rgba(26,29,46,0.5);border:1px solid var(--border-glass);border-radius:10px;color:white;font-family:inherit;">
+          <input type="password" id="passwordInput" placeholder="كلمة المرور" style="padding:12px 16px;background:rgba(26,29,46,0.5);border:1px solid var(--border-glass);border-radius:10px;color:white;font-family:inherit;">
+          <p id="authError" style="color:#ff6b6b;font-size:0.85rem;display:none;text-align:center;"></p>
+          <button class="btn btn-primary" id="authSubmitBtn" style="padding:12px;font-size:1rem;background:var(--accent-color);"><i class="fa-solid fa-right-to-bracket"></i> تسجيل الدخول</button>
+        </div>
+
+        <!-- Profile View (Shown when logged in) -->
+        <div id="profileViewSection" style="display:none; text-align:center; padding:10px;">
+          <img id="profileViewAvatar" src="" style="width:80px;height:80px;border-radius:50%;margin-bottom:15px;border:3px solid var(--accent-color);">
+          <h3 id="profileViewUsername" style="font-size:1.2rem;margin-bottom:20px;color:white;"></h3>
+          <button class="btn btn-secondary" onclick="handleLogout()" style="width:100%;padding:12px;background:#ff4757;color:white;border-color:#ff4757;"><i class="fa-solid fa-arrow-right-from-bracket"></i> تسجيل الخروج</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="footer-container">
+      <div class="footer-brand"><i class="fa-solid fa-meteor highlight"></i> فضاء <span>الأنمي</span></div>
+      <p class="footer-quote">أفضل مكان لمشاهدة الأنمي المترجم بجودة عالية</p>
+      <div class="footer-divider"></div>
+      <p class="footer-copy">جميع الحقوق محفوظة &copy; 2026.</p>
+    </div>
+  </footer>
+
+  <script src="./app.js?v=6.0"></script>
+  <script src="./spa_overrides.js?v=6.0"></script>
+</body>
+</html>
