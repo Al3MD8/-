@@ -543,9 +543,10 @@ window.openPlayerView = async function(epIndex) {
   
   if(episode.url && episode.url.includes('witanime')) {
     try {
-      const resp = await fetch('/api/proxy?url=' + encodeURIComponent(episode.url));
+      const resp = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(episode.url));
       if(resp.ok) {
-        const html = await resp.text();
+        const data = await resp.json();
+        const html = data.contents;
         const zG_m = html.match(/var _zG\s*=\s*"([^"]+)";/);
         const zH_m = html.match(/var _zH\s*=\s*"([^"]+)";/);
         if(zG_m && zH_m) {
@@ -888,15 +889,18 @@ async function handleAuth() {
   try {
     if(currentAuthTab === 'register') {
       const avatar = userState.selectedAvatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${user}`;
-      const res = await fetch('/api/auth/register', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:user, password:pass, avatar}) });
-      const data = await res.json();
-      if(!data.success) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
-      userState.isLoggedIn = true; userState.username = data.user.username; userState.avatar = data.user.avatar; userState.userId = data.user.id;
+      // Check if user already exists
+      const users = JSON.parse(localStorage.getItem('anime_users') || '{}');
+      if(users[user]) { errEl.textContent = 'اسم المستخدم موجود بالفعل'; errEl.style.display = 'block'; return; }
+      // Register new user
+      users[user] = { username: user, password: pass, avatar: avatar, id: Date.now() };
+      localStorage.setItem('anime_users', JSON.stringify(users));
+      userState.isLoggedIn = true; userState.username = user; userState.avatar = avatar; userState.userId = Date.now();
     } else {
-      const res = await fetch('/api/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username:user, password:pass}) });
-      const data = await res.json();
-      if(!data.success) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
-      userState.isLoggedIn = true; userState.username = data.user.username; userState.avatar = data.user.avatar; userState.userId = data.user.id;
+      // Login with localStorage
+      const users = JSON.parse(localStorage.getItem('anime_users') || '{}');
+      if(!users[user] || users[user].password !== pass) { errEl.textContent = 'اسم المستخدم أو كلمة المرور غير صحيحة'; errEl.style.display = 'block'; return; }
+      userState.isLoggedIn = true; userState.username = user; userState.avatar = users[user].avatar; userState.userId = users[user].id;
     }
     localStorage.setItem('user_profile', JSON.stringify({username:userState.username, avatar:userState.avatar, userId:userState.userId}));
     closeAuthModal();
@@ -904,7 +908,7 @@ async function handleAuth() {
     if(typeof renderProfileCard === 'function') renderProfileCard();
     if(typeof updateHeaderProfile === 'function') updateHeaderProfile();
     updateCommentFormVisibility();
-  } catch(e) { errEl.textContent = 'خطأ في الاتصال بالسيرفر'; errEl.style.display = 'block'; }
+  } catch(e) { errEl.textContent = 'حدث خطأ أثناء المصادقة'; errEl.style.display = 'block'; }
 }
 
 // ===== COMMENTS SYSTEM =====
@@ -920,10 +924,9 @@ async function loadComments() {
   container.innerHTML = '<div class="spinner" style="margin:10px auto;"></div>';
   updateCommentFormVisibility();
   try {
-    const res = await fetch(`/api/comments/${key}`);
-    const data = await res.json();
-    if(data.success) renderComments(data.comments || []);
-    else container.innerHTML = '';
+    const allComments = JSON.parse(localStorage.getItem('anime_comments') || '{}');
+    const comments = allComments[key] || [];
+    renderComments(comments);
   } catch(e) { container.innerHTML = '<p style="color:var(--text-sub);text-align:center;">تعذر تحميل التعليقات</p>'; }
 }
 
@@ -973,9 +976,11 @@ window.deleteComment = async function(commentId) {
   if(!confirm("هل أنت متأكد من حذف تعليقك نهائياً؟")) return;
   const key = getEpisodeKey();
   try {
-    await fetch('/api/comments', { method:'DELETE', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ episodeKey:key, commentId, userId:userState.userId })
-    });
+    const allComments = JSON.parse(localStorage.getItem('anime_comments') || '{}');
+    if(allComments[key]) {
+      allComments[key] = allComments[key].filter(c => c.id !== commentId);
+      localStorage.setItem('anime_comments', JSON.stringify(allComments));
+    }
     loadComments();
   } catch(e) {}
 };
@@ -1065,25 +1070,33 @@ window.submitComment = async function() {
 
   let imageUrl = '';
   if(commentImageBase64) {
-    try {
-      const r = await fetch('/api/upload', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({image:commentImageBase64}) });
-      const d = await r.json();
-      if(d.success) imageUrl = d.url;
-    } catch(e) {}
+    imageUrl = commentImageBase64;
   }
 
   try {
-    await fetch('/api/comments', { method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ 
-        episodeKey:key, 
-        userId:userState.userId, 
-        username:userState.username, 
-        avatar:userState.avatar, 
-        text, 
-        image:imageUrl,
-        parentId: replyToCommentId 
-      })
-    });
+    const allComments = JSON.parse(localStorage.getItem('anime_comments') || '{}');
+    if(!allComments[key]) allComments[key] = [];
+    const newComment = {
+      id: Date.now().toString(),
+      userId: userState.userId,
+      username: userState.username,
+      avatar: userState.avatar,
+      text,
+      image: imageUrl,
+      parentId: replyToCommentId,
+      createdAt: new Date().toISOString(),
+      likes: []
+    };
+    if(replyToCommentId) {
+      const parentComment = allComments[key].find(c => c.id === replyToCommentId);
+      if(parentComment) {
+        if(!parentComment.replies) parentComment.replies = [];
+        parentComment.replies.push(newComment);
+      }
+    } else {
+      allComments[key].push(newComment);
+    }
+    localStorage.setItem('anime_comments', JSON.stringify(allComments));
     document.getElementById('commentInput').value = '';
     cancelReply();
     clearCommentImage();
@@ -1095,9 +1108,20 @@ window.likeComment = async function(commentId) {
   if(!userState.isLoggedIn) { openAuthModal(); return; }
   const key = getEpisodeKey();
   try {
-    await fetch('/api/comments/like', { method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ episodeKey:key, commentId, userId:userState.userId })
-    });
+    const allComments = JSON.parse(localStorage.getItem('anime_comments') || '{}');
+    if(allComments[key]) {
+      const comment = allComments[key].find(c => c.id === commentId);
+      if(comment) {
+        if(!comment.likes) comment.likes = [];
+        const likeIndex = comment.likes.indexOf(userState.userId);
+        if(likeIndex === -1) {
+          comment.likes.push(userState.userId);
+        } else {
+          comment.likes.splice(likeIndex, 1);
+        }
+        localStorage.setItem('anime_comments', JSON.stringify(allComments));
+      }
+    }
     loadComments();
   } catch(e) {}
 };

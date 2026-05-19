@@ -72,19 +72,21 @@ async function getWitanimeEpisodes(anime) {
   for (const title of searchTitles) {
     try {
       const searchUrl = `https://witanime.you/?search_param=animes&s=${encodeURIComponent(title)}`;
-      const response = await fetch(`/api/proxy?url=${encodeURIComponent(searchUrl)}`);
+      const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(searchUrl)}`);
       if (!response.ok) continue;
       
-      const html = await response.text();
+      const data = await response.json();
+      const html = data.contents;
       const regex = /<a\s+href="(https:\/\/witanime\.you\/anime\/[^"]+)"\s+class="overlay"><\/a>/i;
       const match = html.match(regex);
       if (match && match[1]) {
         const animeUrl = match[1];
         
-        const animeRes = await fetch(`/api/proxy?url=${encodeURIComponent(animeUrl)}`);
+        const animeRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(animeUrl)}`);
         if (!animeRes.ok) continue;
         
-        const animeHtml = await animeRes.text();
+        const animeData = await animeRes.json();
+        const animeHtml = animeData.contents;
         const epDataMatch = animeHtml.match(/var\s+processedEpisodeData\s*=\s*'([^']+)';/);
         if (epDataMatch && epDataMatch[1]) {
           const decryptedEpisodes = decryptWitanimeEpisodes(epDataMatch[1]);
@@ -789,9 +791,10 @@ async function loadActiveEpisodePlayback() {
   // 1. Try to load and decrypt real Witanime servers if available
   if (episode.url && episode.url.includes("witanime")) {
     try {
-      const response = await fetch(`/api/proxy?url=${encodeURIComponent(episode.url)}`);
+      const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(episode.url)}`);
       if (response.ok) {
-        const episodeHtml = await response.text();
+        const data = await response.json();
+        const episodeHtml = data.contents;
         const zG_match = episodeHtml.match(/var _zG\s*=\s*"([^"]+)";/);
         const zH_match = episodeHtml.match(/var _zH\s*=\s*"([^"]+)";/);
         
@@ -1126,34 +1129,8 @@ function registerEventListeners() {
     };
   }
 
-  // Submit Profile Changes / Signup
-  if (DOM.authSubmitBtn) {
-    DOM.authSubmitBtn.onclick = () => {
-      const name = DOM.usernameInput.value.trim();
-      if (!name) {
-        showToast("خطأ: يرجى إدخال اسم المستخدم ⚠️");
-        return;
-      }
-
-      // Save to state
-      userState.isLoggedIn = true;
-      userState.username = name;
-      userState.avatar = userState.selectedAvatar;
-
-      // Save to localStorage
-      localStorage.setItem('user_profile', JSON.stringify({
-        username: userState.username,
-        avatar: userState.avatar
-      }));
-
-      // Render modifications
-      renderProfileCard();
-      updateHeaderProfile();
-      closeAuthModal();
-      
-      showToast(`مرحباً بك مجدداً يا ${userState.username}! 🌟`);
-    };
-  }
+  // Submit Profile Changes / Signup - Handled by spa_overrides.js
+  // Removed to avoid conflict with handleAuth() in spa_overrides.js
 
   if (DOM.modalCloseBtn) DOM.modalCloseBtn.addEventListener('click', closeAnimeModal);
   if (DOM.modalBackdrop) DOM.modalBackdrop.addEventListener('click', closeAnimeModal);
