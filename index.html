@@ -23,7 +23,8 @@
   <header class="header">
     <div class="header-container" style="display:flex;justify-content:space-between;align-items:center;width:100%;">
       <div class="header-controls" style="display:flex;align-items:center;gap:12px;">
-        <button class="sidebar-toggle-btn" id="sidebarToggleBtn"><i class="fa-solid fa-bars-staggered"></i></button>
+        <button class="sidebar-toggle-btn" id="sidebarToggleBtn" aria-label="القائمة"><i class="fa-solid fa-bars-staggered"></i></button>
+        <button class="theme-toggle-btn" id="themeToggleBtn" aria-label="تبديل المظهر" style="display:flex; align-items:center; justify-content:center; width:42px; height:42px; border-radius:var(--r-sm); background:rgba(255,255,255,0.04); border:1px solid var(--border); color:var(--accent); font-size:1.2rem; transition:0.25s;"><i class="fa-solid fa-moon"></i></button>
         <button class="header-profile-btn" id="headerProfileBtn" style="display:none;" onclick="openAuthModal()"><img src="" id="headerAvatar" alt="avatar" class="header-avatar-img"></button>
       </div>
       
@@ -112,6 +113,12 @@
           <button class="filter-btn" data-genre="Sci-Fi">خيال علمي</button>
           <button class="filter-btn" data-genre="Drama">دراما</button>
           <button class="filter-btn" data-genre="Romance">رومنسي</button>
+          <button class="filter-btn" data-genre="Supernatural">قوى خارقة</button>
+          <button class="filter-btn" data-genre="Magic">سحر</button>
+          <button class="filter-btn" data-genre="Mystery">غموض</button>
+          <button class="filter-btn" data-genre="Sports">رياضة</button>
+          <button class="filter-btn" data-genre="Horror">رعب</button>
+          <button class="filter-btn" data-genre="Slice of Life">شريحة من الحياة</button>
         </div>
       </div>
       <div class="anime-grid" id="browseAnimeGrid"></div>
@@ -142,15 +149,15 @@
         <h1 id="detailsTitle" style="font-size:2rem;font-weight:800;margin-bottom:10px;"></h1>
         <div id="detailsGenres" style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap;"></div>
       </div>
-      <div style="display:flex;gap:40px;background:rgba(26,29,46,0.5);padding:30px;border-radius:16px;border:1px solid var(--border-glass);flex-wrap:wrap;">
-        <div style="flex:0 0 250px;">
+      <div class="details-container">
+        <div class="details-banner-wrapper">
           <img id="detailsBanner" src="" alt="poster" style="width:100%;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.5);">
           <button class="btn btn-secondary" id="detailsSaveBtn" style="width:100%;margin-top:15px;"><i class="fa-regular fa-bookmark"></i> حفظ</button>
           <a href="#" id="detailsMalLink" target="_blank" class="btn btn-secondary" style="width:100%;margin-top:10px;font-size:0.85rem;"><i class="fa-brands fa-envira"></i> MAL</a>
         </div>
-        <div style="flex:1;min-width:300px;">
+        <div class="details-info-wrapper">
           <p id="detailsDesc" style="font-size:1rem;line-height:1.8;margin-bottom:20px;"></p>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:0.9rem;color:var(--text-sub);">
+          <div class="details-meta-grid">
             <div><strong>النوع:</strong> <span id="detailsType"></span></div>
             <div><strong>الموسم:</strong> <span id="detailsSeason"></span></div>
             <div><strong>الحالة:</strong> <span id="detailsStatus" style="color:var(--accent-color);"></span></div>
@@ -171,14 +178,14 @@
     <div style="background:rgba(10,12,22,0.98);padding:15px 40px;border-bottom:1px solid var(--border-glass);text-align:center;">
       <h2 id="playerEpTitle" style="font-size:1.2rem;font-weight:700;"></h2>
     </div>
-    <div style="display:flex;max-width:1400px;margin:0 auto;gap:20px;padding:20px;flex-wrap:wrap;">
+    <div class="player-view-container">
       <!-- Episodes Sidebar -->
-      <div style="flex:0 0 300px;background:rgba(26,29,46,0.6);border-radius:12px;border:1px solid var(--border-glass);display:flex;flex-direction:column;height:650px;">
+      <div class="player-episodes-sidebar">
         <div style="padding:15px;border-bottom:1px solid var(--border-glass);font-weight:800;text-align:center;">الحلقات</div>
         <div id="playerSidebarEps" style="flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:4px;"></div>
       </div>
       <!-- Main Player -->
-      <div style="flex:1;min-width:500px;display:flex;flex-direction:column;gap:12px;">
+      <div class="player-main-content">
         <div id="playerVideoBox" style="width:100%;background:#05070c;border-radius:12px;overflow:hidden;aspect-ratio:16/9;position:relative;border:1px solid var(--border-glass);">
           <iframe id="mainVideoIframe" src="" frameborder="0" allowfullscreen style="width:100%;height:100%;position:absolute;inset:0;"></iframe>
           <!-- Server Selection Overlay with blurred anime bg -->
@@ -288,11 +295,17 @@
         <!-- Avatar (register only) -->
         <div id="avatarSection" style="display:none;margin-bottom:15px;text-align:center;">
           <label style="font-size:0.85rem;font-weight:700;margin-bottom:10px;display:block;">صورة الحساب:</label>
-          <div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap;">
+          <div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
             <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Luffy" class="avatar-option-img active" data-avatar="https://api.dicebear.com/7.x/bottts/svg?seed=Luffy" style="width:45px;height:45px;border-radius:50%;border:2px solid transparent;cursor:pointer;">
             <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Zoro" class="avatar-option-img" data-avatar="https://api.dicebear.com/7.x/bottts/svg?seed=Zoro" style="width:45px;height:45px;border-radius:50%;border:2px solid transparent;cursor:pointer;">
             <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Naruto" class="avatar-option-img" data-avatar="https://api.dicebear.com/7.x/bottts/svg?seed=Naruto" style="width:45px;height:45px;border-radius:50%;border:2px solid transparent;cursor:pointer;">
             <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Goku" class="avatar-option-img" data-avatar="https://api.dicebear.com/7.x/bottts/svg?seed=Goku" style="width:45px;height:45px;border-radius:50%;border:2px solid transparent;cursor:pointer;">
+          </div>
+          <label style="font-size:0.85rem;font-weight:700;color:var(--text-sub);margin-top:5px;display:block;text-align:right;">أو اختر صورة من جهازك:</label>
+          <div style="display:flex;align-items:center;gap:10px;justify-content:flex-start;margin-top:5px;">
+            <label for="customAvatarFile" style="cursor:pointer;background:rgba(255,255,255,0.08);padding:8px 12px;border-radius:8px;border:1px solid var(--border-glass);font-size:0.8rem;display:flex;align-items:center;gap:6px;font-weight:600;"><i class="fa-solid fa-upload" style="color:var(--accent-color);"></i> رفع صورة</label>
+            <input type="file" id="customAvatarFile" accept="image/*" style="display:none;">
+            <span id="customAvatarName" style="font-size:0.75rem;color:var(--text-sub);max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></span>
           </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:12px;" id="authInputsForm">
@@ -320,6 +333,12 @@
               <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Goku" class="profile-avatar-option-img" data-avatar="https://api.dicebear.com/7.x/bottts/svg?seed=Goku" style="width:40px;height:40px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:0.2s;">
               <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Sasuke" class="profile-avatar-option-img" data-avatar="https://api.dicebear.com/7.x/bottts/svg?seed=Sasuke" style="width:40px;height:40px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:0.2s;">
               <img src="https://api.dicebear.com/7.x/bottts/svg?seed=Sakura" class="profile-avatar-option-img" data-avatar="https://api.dicebear.com/7.x/bottts/svg?seed=Sakura" style="width:40px;height:40px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:0.2s;">
+            </div>
+            <label style="font-size:0.85rem;font-weight:700;color:var(--text-sub);margin-top:5px;display:block;">أو اختر صورة من جهازك:</label>
+            <div style="display:flex;align-items:center;gap:10px;justify-content:flex-start;margin-bottom:5px;">
+              <label for="profileEditCustomAvatarFile" style="cursor:pointer;background:rgba(255,255,255,0.08);padding:8px 12px;border-radius:8px;border:1px solid var(--border-glass);font-size:0.8rem;display:flex;align-items:center;gap:6px;font-weight:600;"><i class="fa-solid fa-upload" style="color:var(--accent-color);"></i> رفع صورة</label>
+              <input type="file" id="profileEditCustomAvatarFile" accept="image/*" style="display:none;">
+              <span id="profileEditCustomAvatarName" style="font-size:0.75rem;color:var(--text-sub);max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></span>
             </div>
             
             <p id="profileEditError" style="color:#ff6b6b;font-size:0.85rem;display:none;text-align:center;"></p>

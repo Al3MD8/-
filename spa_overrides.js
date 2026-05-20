@@ -63,6 +63,31 @@ let replyToCommentId = null;
 let browseSearchTimeout = null;
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Theme Toggle Controller
+  const themeToggleBtn = document.getElementById('themeToggleBtn');
+  const currentTheme = localStorage.getItem('theme') || 'dark';
+
+  if (currentTheme === 'light') {
+    document.body.classList.add('light-theme');
+    if (themeToggleBtn) {
+      themeToggleBtn.innerHTML = '<i class="fa-solid fa-sun"></i>';
+      themeToggleBtn.style.color = '#ffb703';
+    }
+  }
+
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', () => {
+      const isLight = document.body.classList.toggle('light-theme');
+      localStorage.setItem('theme', isLight ? 'light' : 'dark');
+      themeToggleBtn.innerHTML = isLight ? '<i class="fa-solid fa-sun"></i>' : '<i class="fa-solid fa-moon"></i>';
+      themeToggleBtn.style.color = isLight ? '#ffb703' : 'var(--accent)';
+      
+      if (typeof showToast === 'function') {
+        showToast(isLight ? 'تم تفعيل الوضع النهاري ☀️' : 'تم تفعيل الوضع الليلي 🌙');
+      }
+    });
+  }
+
   // Sidebar nav links
   document.querySelectorAll('.sidebar-nav-link').forEach(link => {
     link.onclick = (e) => {
@@ -231,7 +256,13 @@ window.renderBrowsePage = async function() {
     'Fantasy': 10,
     'Sci-Fi': 24,
     'Drama': 8,
-    'Romance': 22
+    'Romance': 22,
+    'Supernatural': 37,
+    'Magic': 16,
+    'Mystery': 7,
+    'Sports': 30,
+    'Horror': 14,
+    'Slice of Life': 36
   };
 
   try {
@@ -563,18 +594,21 @@ window.openPlayerView = async function(epIndex) {
   let servers = [];
   const episode = episodes[epIndex];
   
-  if(episode.url && episode.url.includes('witanime')) {
+  let episodeUrl = episode.url || '';
+  if(episodeUrl.includes('witanime')) {
     try {
+      const domain = await window.getWitanimeDomain();
+      episodeUrl = episodeUrl.replace(/https:\/\/witanime\.[a-z]+/i, `https://${domain}`);
       let html = '';
       const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port;
       
       if (isLocal) {
-        const resp = await fetch('/api/proxy?url=' + encodeURIComponent(episode.url));
+        const resp = await fetch('/api/proxy?url=' + encodeURIComponent(episodeUrl));
         if (resp.ok) {
           html = await resp.text();
         }
       } else {
-        const resp = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(episode.url));
+        const resp = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(episodeUrl));
         if (resp.ok) {
           const data = await resp.json();
           html = data.contents || '';
@@ -602,14 +636,14 @@ window.openPlayerView = async function(epIndex) {
     }
   }
 
-  if(servers.length === 0) {
-    servers = [
-      {name:'VIDLINK (مترجم)', url:`https://vidlink.pro/anime/${anime.mal_id}/${epNum}/sub?fallback=true&primaryColor=00a8cc`, quality:'fhd'},
-      {name:'VIDLINK (مدبلج)', url:`https://vidlink.pro/anime/${anime.mal_id}/${epNum}/dub?fallback=true&primaryColor=00a8cc`, quality:'hd'},
-    ];
-    if(anime.anilistId) servers.push({name:'EMBED.SU', url:`https://embed.su/embed/anime/${anime.anilistId}/${epNum}`, quality:'fhd'});
-    if(gogoSlug) servers.push({name:'PLAYTAKU', url:`https://playtaku.online/streaming.php?id=${gogoSlug}-episode-${epNum}`, quality:'hd'});
-  }
+  // Always append direct premium fallback servers
+  servers.push({name:'VIDLINK (FHD)', url:`https://vidlink.pro/anime/${anime.mal_id}/${epNum}/sub?fallback=true&primaryColor=00a8cc`, quality:'fhd'});
+  servers.push({name:'VIDSRC.TO (FHD)', url:`https://vidsrc.to/embed/anime/${anime.mal_id}/${epNum}`, quality:'fhd'});
+  servers.push({name:'VIDSRC.XYZ (FHD)', url:`https://vidsrc.xyz/embed/anime/${anime.mal_id}/${epNum}`, quality:'fhd'});
+  servers.push({name:'AUTOEMBED (FHD)', url:`https://player.vidsrc.nl/embed/anime/${anime.mal_id}/${epNum}`, quality:'fhd'});
+  
+  if(anime.anilistId) servers.push({name:'EMBED.SU (FHD)', url:`https://embed.su/embed/anime/${anime.anilistId}/${epNum}`, quality:'fhd'});
+  if(gogoSlug) servers.push({name:'PLAYTAKU (HD)', url:`https://playtaku.online/streaming.php?id=${gogoSlug}-episode-${epNum}`, quality:'hd'});
 
   state.activeServers = servers;
   
@@ -1307,6 +1341,47 @@ window.renderLatestEpisodes = async function() {
 };
 
 // ===== FAST DYNAMIC WITANIME SCRAPER & DECRYPTOR OVERRIDE =====
+let witanimeDomainCache = null;
+
+window.getWitanimeDomain = async function() {
+  if (witanimeDomainCache) return witanimeDomainCache;
+  const domains = ['witanime.pics', 'witanime.net', 'witanime.live', 'witanime.co', 'witanime.one', 'witanime.you'];
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port;
+
+  async function testDomain(dom) {
+    const url = `https://${dom}/`;
+    try {
+      if (isLocal) {
+        const res = await fetch('/api/proxy?url=' + encodeURIComponent(url));
+        if (res.ok) {
+          const text = await res.text();
+          if (text && text.includes('witanime')) return true;
+        }
+      } else {
+        const res = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(url));
+        if (res.ok) {
+          const d = await res.json();
+          if (d.contents && d.contents.includes('witanime')) return true;
+        }
+      }
+    } catch(e) {
+      console.warn(`Domain ${dom} check failed`, e);
+    }
+    return false;
+  }
+
+  for (const dom of domains) {
+    if (await testDomain(dom)) {
+      witanimeDomainCache = dom;
+      console.log(`Active Witanime domain found: ${dom}`);
+      return dom;
+    }
+  }
+
+  witanimeDomainCache = 'witanime.pics'; // fallback
+  return witanimeDomainCache;
+};
+
 window.getWitanimeEpisodes = async function(anime) {
   const searchTitles = [];
   if (anime.title) searchTitles.push(anime.title);
@@ -1328,11 +1403,14 @@ window.getWitanimeEpisodes = async function(anime) {
     throw new Error('Fetch failed');
   }
 
+  const domain = await window.getWitanimeDomain();
+
   for (const title of searchTitles.slice(0, 2)) {
     try {
-      const searchUrl = `https://witanime.you/?search_param=animes&s=${encodeURIComponent(title)}`;
+      const searchUrl = `https://${domain}/?search_param=animes&s=${encodeURIComponent(title)}`;
       const html = await fetchHTML(searchUrl);
-      const regex = /<a\s+href="(https:\/\/witanime\.you\/anime\/[^"]+)"\s+class="overlay"><\/a>/i;
+      const regexStr = `<a\\s+href="(https:\\/\\/${domain.replace(/\./g, '\\.')}\\/anime\\/[^"]+)"\\s+class="overlay"><\\/a>`;
+      const regex = new RegExp(regexStr, 'i');
       const match = html.match(regex);
       if (match && match[1]) {
         const animeUrl = match[1];
@@ -1398,6 +1476,53 @@ document.addEventListener('click', (e) => {
       img.style.transform = active ? 'scale(1.1)' : 'scale(1)';
       img.style.boxShadow = active ? '0 0 10px var(--accent-color)' : 'none';
     });
+  }
+});
+
+// Bind change for custom image upload
+document.addEventListener('change', async (e) => {
+  if (e.target.id === 'customAvatarFile' || e.target.id === 'profileEditCustomAvatarFile') {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const nameSpan = e.target.id === 'customAvatarFile' ? document.getElementById('customAvatarName') : document.getElementById('profileEditCustomAvatarName');
+    if (nameSpan) nameSpan.textContent = file.name;
+    
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const base64Data = ev.target.result;
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: base64Data })
+        });
+        const data = await res.json();
+        if (data.success && data.url) {
+          if (e.target.id === 'customAvatarFile') {
+            document.querySelectorAll('.avatar-option-img').forEach(i => i.classList.remove('active'));
+            userState.selectedAvatar = data.url;
+          } else {
+            document.querySelectorAll('.profile-avatar-option-img').forEach(img => {
+              img.style.borderColor = 'transparent';
+              img.style.transform = 'scale(1)';
+              img.style.boxShadow = 'none';
+            });
+            profileSelectedAvatar = data.url;
+          }
+          if (typeof showToast === 'function') showToast('تم رفع الصورة بنجاح ✅');
+        }
+      } catch (err) {
+        console.error('Upload failed:', err);
+        if (e.target.id === 'customAvatarFile') {
+          userState.selectedAvatar = base64Data;
+        } else {
+          profileSelectedAvatar = base64Data;
+        }
+        if (typeof showToast === 'function') showToast('تم الحفظ محلياً ⚠️');
+      }
+    };
+    reader.readAsDataURL(file);
   }
 });
 
