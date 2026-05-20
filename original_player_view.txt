@@ -1,0 +1,105 @@
+﻿window.openPlayerView = async function(epIndex) {
+  state.activeEpisodeIndex = epIndex;
+  const anime = state.activeAnime;
+  const episodes = anime.fetchedEpisodes;
+  if(!episodes || !episodes.length) return;
+  
+  switchView('playerView');
+  document.getElementById('playerEpTitle').textContent = (anime.title_english || anime.title) + ' - ╪º┘ä╪¡┘ä┘é╪⌐ ' + (epIndex+1);
+  
+  // Set blurred bg
+  const bgEl = document.getElementById('serverOverlayBg');
+  if(bgEl) bgEl.style.backgroundImage = `url('${anime.images?.webp?.large_image_url || ''}')`;
+  
+  // Sidebar episodes
+  const sidebar = document.getElementById('playerSidebarEps');
+  sidebar.innerHTML = episodes.map((ep,idx) => {
+    const active = idx === epIndex;
+    return `<div class="ep-sidebar-item ${active?'active':''}" onclick="openPlayerView(${idx})">╪º┘ä╪¡┘ä┘é╪⌐ ${idx+1}</div>`;
+  }).join('');
+  setTimeout(() => { const el = sidebar.children[epIndex]; if(el) el.scrollIntoView({behavior:'smooth',block:'center'}); }, 200);
+
+  // Show server overlay, hide iframe
+  document.getElementById('serversSelectionOverlay').style.display = 'flex';
+  document.getElementById('mainVideoIframe').src = '';
+  document.getElementById('playerServersList').innerHTML = '<div class="spinner"></div>';
+
+  // Fetch servers
+  const epNum = epIndex + 1;
+  let gogoSlug = await getGogoanimeId(anime);
+  let servers = [];
+  const episode = episodes[epIndex];
+  
+  if(episode.url && episode.url.includes('witanime')) {
+    try {
+      const resp = await fetch('/api/proxy?url=' + encodeURIComponent(episode.url));
+      if(resp.ok) {
+        const html = await resp.text();
+        const zG_m = html.match(/var _zG\s*=\s*"([^"]+)";/);
+        const zH_m = html.match(/var _zH\s*=\s*"([^"]+)";/);
+        if(zG_m && zH_m) {
+          const zG = JSON.parse(atob(zG_m[1]));
+          const zH = JSON.parse(atob(zH_m[1]));
+          let m; const rx = /data-server-id="(\d+)"[^>]*>\s*<span[^>]*>([^<]+)<\/span>/g;
+          while((m=rx.exec(html))!==null) {
+            const d = decryptWitanimeServer(zG[parseInt(m[1])], zH[parseInt(m[1])]);
+            if(d) {
+              const name = m[2].trim();
+              servers.push({name: name, url:d, quality: classifyServerQuality(name)});
+            }
+          }
+        }
+      }
+    } catch(e) {}
+  }
+
+  if(servers.length === 0) {
+    servers = [
+      {name:'VIDLINK (┘à╪¬╪▒╪¼┘à)', url:`https://vidlink.pro/anime/${anime.mal_id}/${epNum}/sub?fallback=true&primaryColor=00a8cc`, quality:'fhd'},
+      {name:'VIDLINK (┘à╪»╪¿┘ä╪¼)', url:`https://vidlink.pro/anime/${anime.mal_id}/${epNum}/dub?fallback=true&primaryColor=00a8cc`, quality:'hd'},
+    ];
+    if(anime.anilistId) servers.push({name:'EMBED.SU', url:`https://embed.su/embed/anime/${anime.anilistId}/${epNum}`, quality:'fhd'});
+    if(gogoSlug) servers.push({name:'PLAYTAKU', url:`https://playtaku.online/streaming.php?id=${gogoSlug}-episode-${epNum}`, quality:'hd'});
+  }
+
+  state.activeServers = servers;
+  
+  // Smart Dynamic Quality Tabs Controller
+  const hasFHD = servers.some(s => s.quality === 'fhd');
+  const hasHD = servers.some(s => s.quality === 'hd');
+  const btnFHD = document.querySelector('.quality-circle[data-q="fhd"]');
+  const btnHD = document.querySelector('.quality-circle[data-q="hd"]');
+  const qualityTabs = document.getElementById('qualityTabs');
+
+  if (qualityTabs && btnFHD && btnHD) {
+    if (hasFHD && hasHD) {
+      // Both qualities exist: Show both tabs
+      qualityTabs.style.display = 'flex';
+      btnFHD.style.display = 'inline-block';
+      btnHD.style.display = 'inline-block';
+      window.filterServersByQuality('fhd'); // Default to best quality
+    } else if (hasFHD) {
+      // Only FHD exists: Hide tabs and auto-select FHD
+      qualityTabs.style.display = 'none';
+      window.filterServersByQuality('fhd');
+    } else if (hasHD) {
+      // Only HD exists (like Naruto/older anime): Hide tabs and auto-select HD
+      qualityTabs.style.display = 'none';
+      window.filterServersByQuality('hd');
+    } else {
+      // No specific categories: Hide tabs and show all available
+      qualityTabs.style.display = 'none';
+      window.filterServersByQuality('all');
+    }
+  } else {
+    window.filterServersByQuality('fhd');
+  }
+
+  // Nav buttons
+  document.getElementById('btnNextEpFull').onclick = () => { if(epIndex < episodes.length-1) openPlayerView(epIndex+1); };
+  document.getElementById('btnPrevEpFull').onclick = () => { if(epIndex > 0) openPlayerView(epIndex-1); };
+
+  // Load comments
+  cancelReply();
+  loadComments();
+};
