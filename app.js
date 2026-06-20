@@ -2,17 +2,28 @@
 // CONFIGURATION (الإعدادات)
 // أضف أرقام الأنميات (MAL IDs) التي تأكدت من عمل سيرفراتها هنا:
 // ==========================================================================
-const VERIFIED_ANIME_IDS = [
-  21,      // One Piece
-  1735,    // Naruto: Shippuuden
-  31964,   // Boku no Hero Academia
-  52991,   // Sousou no Frieren
-  11061,   // Hunter x Hunter (2011)
-  5114,    // Fullmetal Alchemist: Brotherhood
-  38000,   // Kimetsu no Yaiba
-  16498,   // Shingeki no Kyojin
-  30276,   // One Punch Man
-  40748    // Jujutsu Kaisen
+const CUSTOM_ANIME_DB = [
+  {
+    mal_id: 1, // رقم فريد
+    title: "أنمي تجريبي (FANTA)",
+    title_english: "Fanta Test Anime",
+    images: { webp: { large_image_url: "https://api.dicebear.com/7.x/bottts/svg?seed=Fanta&backgroundColor=1A1D2E" } },
+    status: "مكتمل",
+    type: "TV",
+    episodes: 1,
+    score: 10.0,
+    synopsis: "هذا أنمي تجريبي يوضح كيفية إضافة الأنميات مع سيرفراتها الخاصة.",
+    genres: [{name: "أكشن"}],
+    fetchedEpisodes: [
+      {
+        title: "الحلقة 1",
+        servers: [
+          { name: "سيرفر رئيسي سريع (FHD)", url: "https://test-video-url.com/video.mp4", quality: "fhd" },
+          { name: "سيرفر بديل (HD)", url: "https://test-video-url.com/video.mp4", quality: "hd" }
+        ]
+      }
+    ]
+  }
 ];
 
 // ==========================================================================
@@ -332,66 +343,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 // API FETCH LOGIC WITH INSTANT CACHING (نظام الكاش فائق السرعة لمنع البطء والتعليق)
 // ==========================================================================
 async function fetchAPIAnime() {
-  const CACHE_KEY = "verified_anime_cache_v3";
-  const CACHE_TIME_KEY = "verified_anime_cache_time_v3";
-
-  let cachedAnime = [];
-  try {
-    const cachedData = localStorage.getItem(CACHE_KEY);
-    if (cachedData) cachedAnime = JSON.parse(cachedData);
-  } catch(e) {}
-
-  // Filter out any cached anime that are NO LONGER in the VERIFIED list
-  cachedAnime = cachedAnime.filter(a => VERIFIED_ANIME_IDS.includes(a.mal_id));
-
-  // Determine which anime IDs are missing from the cache
-  const cachedIds = cachedAnime.map(a => a.mal_id);
-  const missingIds = VERIFIED_ANIME_IDS.filter(id => !cachedIds.includes(id));
-
-  // Sort initially by ID or title
-  state.popularAnime = [...cachedAnime];
-  state.seasonalAnime = [...cachedAnime].reverse();
-
-  // Render what we have instantly
+  state.popularAnime = [...CUSTOM_ANIME_DB];
+  state.seasonalAnime = [...CUSTOM_ANIME_DB].reverse();
   renderAllContent();
-
-  if (missingIds.length > 0) {
-    console.log(`Fetching ${missingIds.length} missing verified animes...`);
-    
-    // Show a small loading indicator
-    if (typeof showToast === 'function') {
-      showToast("جاري تحميل بيانات الأنميات الجديدة... ⏳");
-    }
-
-    const newlyFetched = [];
-    for (const id of missingIds) {
-      try {
-        const res = await fetch(`${API_BASE}/anime/${id}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.data) newlyFetched.push(data.data);
-        }
-        // Delay to avoid Jikan rate limit (3 req/sec)
-        await new Promise(resolve => setTimeout(resolve, 400));
-      } catch (e) {
-         console.warn(`Failed to fetch anime ${id}`, e);
-      }
-    }
-
-    if (newlyFetched.length > 0) {
-      const allAnime = [...cachedAnime, ...newlyFetched];
-      localStorage.setItem(CACHE_KEY, JSON.stringify(allAnime));
-      localStorage.setItem(CACHE_TIME_KEY, Date.now().toString());
-      
-      state.popularAnime = [...allAnime];
-      state.seasonalAnime = [...allAnime].reverse();
-      renderAllContent();
-      
-      if (typeof showToast === 'function') {
-        showToast("اكتمل تحميل الأنميات بنجاح! ✅");
-      }
-    }
-  }
 }
 
 function renderAllContent() {

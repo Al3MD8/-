@@ -423,47 +423,19 @@ window.openAnimeDetails = async function(animeId) {
   const relGrid = document.getElementById('detailsRelationsGrid');
   relGrid.innerHTML = '<div class="spinner"></div>';
   
-  // Optimistic Instant Episodes Rendering
-  const total = anime.episodes || 0;
-  let initialEps = [];
-  if (total > 0) {
-    initialEps = Array.from({length: total}, (_,i) => ({mal_id:i+1, title:'الحلقة '+(i+1)}));
-  } else {
-    initialEps = Array.from({length: 12}, (_,i) => ({mal_id:i+1, title:'الحلقة '+(i+1)}));
-  }
-  state.activeAnime.fetchedEpisodes = initialEps;
+  // Read episodes from the custom DB directly
+  const finalEps = anime.fetchedEpisodes || [];
+  state.activeAnime.fetchedEpisodes = finalEps;
   
-  // Render episodes grid instantly!
-  grid.innerHTML = initialEps.map((ep,idx) => `
-    <button class="ep-card-btn" onclick="openPlayerView(${idx})">
-      <i class="fa-solid fa-play-circle"></i> الحلقة ${idx+1}
-    </button>
-  `).join('');
-
-  // Fetch detailed data asynchronously in the background
-  (async () => {
-    try {
-      const [witanimeEps, apiEps, anilistId] = await Promise.all([
-        window.getWitanimeEpisodes(anime).catch(() => []),
-        fetchAnimeEpisodes(anime.mal_id).catch(() => []),
-        state.activeAnime.anilistId ? Promise.resolve(state.activeAnime.anilistId) : getAnilistId(anime.mal_id).catch(() => null)
-      ]);
-      
-      state.activeAnime.anilistId = anilistId;
-      
-      let finalEps = witanimeEps && witanimeEps.length > 0 ? witanimeEps : (apiEps && apiEps.length > 0 ? apiEps : initialEps);
-      state.activeAnime.fetchedEpisodes = finalEps;
-      
-      // Update grid dynamically with real titles if any changed, keeping the click index intact
-      grid.innerHTML = finalEps.map((ep,idx) => `
-        <button class="ep-card-btn" onclick="openPlayerView(${idx})">
-          <i class="fa-solid fa-play-circle"></i> ${ep.title || 'الحلقة '+(idx+1)}
-        </button>
-      `).join('');
-    } catch(e) {
-      console.warn("Background episodes load error:", e);
-    }
-  })();
+  if (finalEps.length === 0) {
+    grid.innerHTML = '<p style="color:var(--text-sub);">لا توجد حلقات مضافة لهذا الأنمي حالياً.</p>';
+  } else {
+    grid.innerHTML = finalEps.map((ep, idx) => `
+      <button class="ep-card-btn" onclick="openPlayerView(${idx})">
+        <i class="fa-solid fa-play-circle"></i> ${ep.title || 'الحلقة '+(idx+1)}
+      </button>
+    `).join('');
+  }
 
   // Process Relations (Sequels / Prequels) with Rich Posters
   try {
@@ -563,27 +535,16 @@ window.openPlayerView = async function(epIndex) {
   document.getElementById('playerServersList').innerHTML = '<div class="spinner"></div>';
 
   // Fetch servers instantly
-  const epNum = epIndex + 1;
-  let gogoSlug = await getGogoanimeId(anime);
-  let servers = [];
+  // Load servers from our CUSTOM_ANIME_DB episode definition
   const episode = episodes[epIndex];
+  let servers = episode.servers || [];
 
-  // Anime specific premium fallback servers (Very Reliable)
-  if (anime.anilistId) {
-    servers.push({name:'EMBED.SU (FHD - سيرفر سريع جداً)', url:`https://embed.su/embed/anime/${anime.anilistId}/${epNum}`, quality:'fhd'});
+  if (servers.length === 0) {
+    document.getElementById('playerServersList').innerHTML = '<p style="color:var(--text-sub);text-align:center;">لا توجد سيرفرات متاحة لهذه الحلقة.</p>';
+  } else {
+    state.activeServers = servers;
+    window.updateQualityTabsAndServers(servers);
   }
-  if (gogoSlug) {
-    servers.push({name:'PLAYTAKU (HD - ممتاز)', url:`https://playtaku.online/streaming.php?id=${gogoSlug}-episode-${epNum}`, quality:'hd'});
-    servers.push({name:'EMBTAKU (HD - بديل)', url:`https://embtaku.pro/streaming.php?id=${gogoSlug}-episode-${epNum}`, quality:'hd'});
-    servers.push({name:'GOGOANIME (HD)', url:`https://gogoanime3.co/${gogoSlug}-episode-${epNum}`, quality:'hd'});
-  }
-  
-  // General movie/tv fallback servers (Unreliable for some anime)
-  servers.push({name:'VIDLINK (SD - احتياطي)', url:`https://vidlink.pro/anime/${anime.mal_id}/${epNum}/sub?fallback=true&primaryColor=00a8cc`, quality:'hd'});
-  servers.push({name:'VIDSRC (SD - احتياطي)', url:`https://vidsrc.to/embed/anime/${anime.mal_id}/${epNum}`, quality:'hd'});
-
-  state.activeServers = servers;
-  window.updateQualityTabsAndServers(servers);
 
   // Nav buttons
   document.getElementById('btnNextEpFull').onclick = () => { if(epIndex < episodes.length-1) openPlayerView(epIndex+1); };
@@ -591,57 +552,8 @@ window.openPlayerView = async function(epIndex) {
 
   // Load comments
   cancelReply();
-  loadComments();
-
-  // Async load Witanime without freezing the UI
-  let episodeUrl = episode.url || '';
-  if(episodeUrl.includes('witanime')) {
-    (async () => {
-      try {
-        const domain = await window.getWitanimeDomain();
-        episodeUrl = episodeUrl.replace(/https:\/\/witanime\.[a-z]+/i, `https://${domain}`);
-        let html = '';
-        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port;
-        
-        if (isLocal) {
-          const resp = await fetch('/api/proxy?url=' + encodeURIComponent(episodeUrl));
-          if (resp.ok) {
-            html = await resp.text();
-          }
-        } else {
-          const resp = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(episodeUrl));
-          if (resp.ok) {
-            const data = await resp.json();
-            html = data.contents || '';
-          }
-        }
-        
-        if (html) {
-          const zG_m = html.match(/var _zG\s*=\s*"([^"]+)";/);
-          const zH_m = html.match(/var _zH\s*=\s*"([^"]+)";/);
-          if(zG_m && zH_m) {
-            const zG = JSON.parse(atob(zG_m[1]));
-            const zH = JSON.parse(atob(zH_m[1]));
-            let m; const rx = /data-server-id="(\d+)"[^>]*>\s*<span[^>]*>([^<]+)<\/span>/g;
-            let foundWitanime = false;
-            while((m=rx.exec(html))!==null) {
-              const d = decryptWitanimeServer(zG[parseInt(m[1])], zH[parseInt(m[1])]);
-              if(d) {
-                const name = m[2].trim();
-                servers.unshift({name: name + ' (Witanime)', url:d, quality: classifyServerQuality(name)}); // Add to top
-                foundWitanime = true;
-              }
-            }
-            if (foundWitanime) {
-              state.activeServers = servers;
-              window.updateQualityTabsAndServers(servers);
-            }
-          }
-        }
-      } catch(e) {
-        console.warn("Failed to load Witanime servers in background:", e);
-      }
-    })();
+  if (typeof loadComments === 'function') {
+    loadComments();
   }
 };
 
@@ -690,7 +602,13 @@ window.filterServersByQuality = function(q) {
 
 window.playServer = function(url) {
   document.getElementById('serversSelectionOverlay').style.display = 'none';
-  document.getElementById('mainVideoIframe').src = url;
+  if (window.AndroidBridge && typeof window.AndroidBridge.playVideo === 'function') {
+    const anime = state.activeAnime;
+    const title = (anime ? (anime.title_english || anime.title) : 'أنمي') + ' - الحلقة ' + (state.activeEpisodeIndex + 1);
+    window.AndroidBridge.playVideo(url, title);
+  } else {
+    document.getElementById('mainVideoIframe').src = url;
+  }
   if(state.activeAnime) window.saveWatchHistoryItem(state.activeAnime, state.activeEpisodeIndex);
 };
 
