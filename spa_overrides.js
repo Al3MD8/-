@@ -562,53 +562,11 @@ window.openPlayerView = async function(epIndex) {
   document.getElementById('mainVideoIframe').src = '';
   document.getElementById('playerServersList').innerHTML = '<div class="spinner"></div>';
 
-  // Fetch servers
+  // Fetch servers instantly
   const epNum = epIndex + 1;
   let gogoSlug = await getGogoanimeId(anime);
   let servers = [];
   const episode = episodes[epIndex];
-  
-  let episodeUrl = episode.url || '';
-  if(episodeUrl.includes('witanime')) {
-    try {
-      const domain = await window.getWitanimeDomain();
-      episodeUrl = episodeUrl.replace(/https:\/\/witanime\.[a-z]+/i, `https://${domain}`);
-      let html = '';
-      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port;
-      
-      if (isLocal) {
-        const resp = await fetch('/api/proxy?url=' + encodeURIComponent(episodeUrl));
-        if (resp.ok) {
-          html = await resp.text();
-        }
-      } else {
-        const resp = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(episodeUrl));
-        if (resp.ok) {
-          const data = await resp.json();
-          html = data.contents || '';
-        }
-      }
-      
-      if (html) {
-        const zG_m = html.match(/var _zG\s*=\s*"([^"]+)";/);
-        const zH_m = html.match(/var _zH\s*=\s*"([^"]+)";/);
-        if(zG_m && zH_m) {
-          const zG = JSON.parse(atob(zG_m[1]));
-          const zH = JSON.parse(atob(zH_m[1]));
-          let m; const rx = /data-server-id="(\d+)"[^>]*>\s*<span[^>]*>([^<]+)<\/span>/g;
-          while((m=rx.exec(html))!==null) {
-            const d = decryptWitanimeServer(zG[parseInt(m[1])], zH[parseInt(m[1])]);
-            if(d) {
-              const name = m[2].trim();
-              servers.push({name: name, url:d, quality: classifyServerQuality(name)});
-            }
-          }
-        }
-      }
-    } catch(e) {
-      console.warn("Failed to load Witanime servers:", e);
-    }
-  }
 
   // Anime specific premium fallback servers (Very Reliable)
   if (anime.anilistId) {
@@ -625,7 +583,69 @@ window.openPlayerView = async function(epIndex) {
   servers.push({name:'VIDSRC (SD - احتياطي)', url:`https://vidsrc.to/embed/anime/${anime.mal_id}/${epNum}`, quality:'hd'});
 
   state.activeServers = servers;
-  
+  window.updateQualityTabsAndServers(servers);
+
+  // Nav buttons
+  document.getElementById('btnNextEpFull').onclick = () => { if(epIndex < episodes.length-1) openPlayerView(epIndex+1); };
+  document.getElementById('btnPrevEpFull').onclick = () => { if(epIndex > 0) openPlayerView(epIndex-1); };
+
+  // Load comments
+  cancelReply();
+  loadComments();
+
+  // Async load Witanime without freezing the UI
+  let episodeUrl = episode.url || '';
+  if(episodeUrl.includes('witanime')) {
+    (async () => {
+      try {
+        const domain = await window.getWitanimeDomain();
+        episodeUrl = episodeUrl.replace(/https:\/\/witanime\.[a-z]+/i, `https://${domain}`);
+        let html = '';
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port;
+        
+        if (isLocal) {
+          const resp = await fetch('/api/proxy?url=' + encodeURIComponent(episodeUrl));
+          if (resp.ok) {
+            html = await resp.text();
+          }
+        } else {
+          const resp = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(episodeUrl));
+          if (resp.ok) {
+            const data = await resp.json();
+            html = data.contents || '';
+          }
+        }
+        
+        if (html) {
+          const zG_m = html.match(/var _zG\s*=\s*"([^"]+)";/);
+          const zH_m = html.match(/var _zH\s*=\s*"([^"]+)";/);
+          if(zG_m && zH_m) {
+            const zG = JSON.parse(atob(zG_m[1]));
+            const zH = JSON.parse(atob(zH_m[1]));
+            let m; const rx = /data-server-id="(\d+)"[^>]*>\s*<span[^>]*>([^<]+)<\/span>/g;
+            let foundWitanime = false;
+            while((m=rx.exec(html))!==null) {
+              const d = decryptWitanimeServer(zG[parseInt(m[1])], zH[parseInt(m[1])]);
+              if(d) {
+                const name = m[2].trim();
+                servers.unshift({name: name + ' (Witanime)', url:d, quality: classifyServerQuality(name)}); // Add to top
+                foundWitanime = true;
+              }
+            }
+            if (foundWitanime) {
+              state.activeServers = servers;
+              window.updateQualityTabsAndServers(servers);
+            }
+          }
+        }
+      } catch(e) {
+        console.warn("Failed to load Witanime servers in background:", e);
+      }
+    })();
+  }
+};
+
+window.updateQualityTabsAndServers = function(servers) {
   // Smart Dynamic Quality Tabs Controller
   const hasFHD = servers.some(s => s.quality === 'fhd');
   const hasHD = servers.some(s => s.quality === 'hd');
@@ -635,35 +655,23 @@ window.openPlayerView = async function(epIndex) {
 
   if (qualityTabs && btnFHD && btnHD) {
     if (hasFHD && hasHD) {
-      // Both qualities exist: Show both tabs
       qualityTabs.style.display = 'flex';
       btnFHD.style.display = 'inline-block';
       btnHD.style.display = 'inline-block';
-      window.filterServersByQuality('fhd'); // Default to best quality
+      window.filterServersByQuality(document.querySelector('.quality-circle.active')?.dataset?.q || 'fhd');
     } else if (hasFHD) {
-      // Only FHD exists: Hide tabs and auto-select FHD
       qualityTabs.style.display = 'none';
       window.filterServersByQuality('fhd');
     } else if (hasHD) {
-      // Only HD exists (like Naruto/older anime): Hide tabs and auto-select HD
       qualityTabs.style.display = 'none';
       window.filterServersByQuality('hd');
     } else {
-      // No specific categories: Hide tabs and show all available
       qualityTabs.style.display = 'none';
       window.filterServersByQuality('all');
     }
   } else {
     window.filterServersByQuality('fhd');
   }
-
-  // Nav buttons
-  document.getElementById('btnNextEpFull').onclick = () => { if(epIndex < episodes.length-1) openPlayerView(epIndex+1); };
-  document.getElementById('btnPrevEpFull').onclick = () => { if(epIndex > 0) openPlayerView(epIndex-1); };
-
-  // Load comments
-  cancelReply();
-  loadComments();
 };
 
 window.filterServersByQuality = function(q) {
