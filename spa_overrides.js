@@ -239,80 +239,54 @@ function closeSidebar() {
   document.body.style.overflow = '';
 }
 
-// ===== UNIVERSAL BROWSE PAGE WITH DYNAMIC JIKAN CATALOG & SEARCH =====
+// ===== BROWSE PAGE (CURATED LIST ONLY) =====
 window.renderBrowsePage = async function() {
   const grid = document.getElementById('browseAnimeGrid');
   if(!grid) return;
   
-  grid.innerHTML = '<div class="spinner" style="margin:50px auto;"></div>';
+  let allItems = [...state.popularAnime]; // Contains all verified anime
   
-  let items = [];
-  let totalPages = 1;
-
-  const genreIds = {
-    'Action': 1,
-    'Adventure': 2,
-    'Comedy': 4,
-    'Fantasy': 10,
-    'Sci-Fi': 24,
-    'Drama': 8,
-    'Romance': 22,
-    'Supernatural': 37,
-    'Magic': 16,
-    'Mystery': 7,
-    'Sports': 30,
-    'Horror': 14,
-    'Slice of Life': 36
+  // Apply Search
+  if (browseState.search.trim() !== '') {
+    const term = browseState.search.toLowerCase();
+    allItems = allItems.filter(a => 
+       a.title.toLowerCase().includes(term) || 
+       (a.title_english && a.title_english.toLowerCase().includes(term))
+    );
+  } 
+  
+  // Apply Genre Filter
+  const genreTranslations = {
+    'Action': 'أكشن',
+    'Adventure': 'مغامرة',
+    'Comedy': 'كوميديا',
+    'Fantasy': 'خيال',
+    'Sci-Fi': 'خيال علمي',
+    'Drama': 'دراما',
+    'Romance': 'رومنسي',
+    'Supernatural': 'قوى خارقة',
+    'Magic': 'سحر',
+    'Mystery': 'غموض',
+    'Sports': 'رياضة',
+    'Horror': 'رعب',
+    'Slice of Life': 'شريحة من الحياة'
   };
 
-  try {
-    let url = '';
-    if (browseState.search.trim() !== '') {
-      // Dynamic search query across over 10,000+ anime titles
-      const q = encodeURIComponent(browseState.search.trim());
-      url = `https://api.jikan.moe/v4/anime?q=${q}&page=${browseState.page}&limit=${browseState.perPage}&order_by=popularity`;
-    } else {
-      // Universal catalog browser (popular first) sorted dynamically with pagination!
-      if (browseState.filter !== 'all') {
-        const gId = genreIds[browseState.filter];
-        url = `https://api.jikan.moe/v4/anime?genres=${gId}&page=${browseState.page}&limit=${browseState.perPage}&order_by=popularity`;
-      } else {
-        url = `https://api.jikan.moe/v4/anime?page=${browseState.page}&limit=${browseState.perPage}&order_by=popularity`;
-      }
-    }
-
-    const res = await fetch(url);
-    const data = await res.json();
-    items = data.data || [];
-    const paginationData = data.pagination;
-    totalPages = paginationData ? (paginationData.last_visible_page || 1) : 1;
-    
-    // Safety cap to avoid requesting blank pages
-    if (totalPages > 1000) totalPages = 1000;
-  } catch(e) {
-    console.warn("Jikan API universal catalog fetch failed, using local fallback:", e);
-    // Local fallback using seasonal + popular lists
-    let allItems = [...state.seasonalAnime, ...state.popularAnime];
-    const seen = new Set();
-    allItems = allItems.filter(a => { if(seen.has(a.mal_id)) return false; seen.add(a.mal_id); return true; });
-
-    if (browseState.search.trim() !== '') {
-      const term = browseState.search.toLowerCase();
-      allItems = allItems.filter(a => a.title.toLowerCase().includes(term) || (a.title_english && a.title_english.toLowerCase().includes(term)));
-    } else if (browseState.filter !== 'all') {
-      allItems = allItems.filter(a => a.genres && a.genres.some(g => g.name === browseState.filter));
-    }
-
-    totalPages = Math.ceil(allItems.length / browseState.perPage);
-    const start = (browseState.page - 1) * browseState.perPage;
-    items = allItems.slice(start, start + browseState.perPage);
+  if (browseState.filter !== 'all') {
+    allItems = allItems.filter(a => a.genres && a.genres.some(g => g.name === browseState.filter || g.name === genreTranslations[browseState.filter]));
   }
 
+  const totalPages = Math.ceil(allItems.length / browseState.perPage) || 1;
+  const start = (browseState.page - 1) * browseState.perPage;
+  const items = allItems.slice(start, start + browseState.perPage);
+
   if(items.length === 0) {
-    grid.innerHTML = '<div class="empty-state"><h3>لا توجد نتائج مطابقة لتصفحك</h3></div>';
+    grid.innerHTML = '<div class="empty-state"><h3>لا توجد نتائج مطابقة لتصفحك في الأنميات المضافة</h3></div>';
   } else {
     grid.innerHTML = items.map(a => window.createAnimeCardHTML(a)).join('');
-    attachCardSaveEvents(grid);
+    if (typeof attachCardSaveEvents === 'function') {
+      attachCardSaveEvents(grid);
+    }
   }
 
   // Render pagination
@@ -636,14 +610,19 @@ window.openPlayerView = async function(epIndex) {
     }
   }
 
-  // Always append direct premium fallback servers
-  servers.push({name:'VIDLINK (FHD)', url:`https://vidlink.pro/anime/${anime.mal_id}/${epNum}/sub?fallback=true&primaryColor=00a8cc`, quality:'fhd'});
-  servers.push({name:'VIDSRC.TO (FHD)', url:`https://vidsrc.to/embed/anime/${anime.mal_id}/${epNum}`, quality:'fhd'});
-  servers.push({name:'VIDSRC.XYZ (FHD)', url:`https://vidsrc.xyz/embed/anime/${anime.mal_id}/${epNum}`, quality:'fhd'});
-  servers.push({name:'AUTOEMBED (FHD)', url:`https://player.vidsrc.nl/embed/anime/${anime.mal_id}/${epNum}`, quality:'fhd'});
+  // Anime specific premium fallback servers (Very Reliable)
+  if (anime.anilistId) {
+    servers.push({name:'EMBED.SU (FHD - سيرفر سريع جداً)', url:`https://embed.su/embed/anime/${anime.anilistId}/${epNum}`, quality:'fhd'});
+  }
+  if (gogoSlug) {
+    servers.push({name:'PLAYTAKU (HD - ممتاز)', url:`https://playtaku.online/streaming.php?id=${gogoSlug}-episode-${epNum}`, quality:'hd'});
+    servers.push({name:'EMBTAKU (HD - بديل)', url:`https://embtaku.pro/streaming.php?id=${gogoSlug}-episode-${epNum}`, quality:'hd'});
+    servers.push({name:'GOGOANIME (HD)', url:`https://gogoanime3.co/${gogoSlug}-episode-${epNum}`, quality:'hd'});
+  }
   
-  if(anime.anilistId) servers.push({name:'EMBED.SU (FHD)', url:`https://embed.su/embed/anime/${anime.anilistId}/${epNum}`, quality:'fhd'});
-  if(gogoSlug) servers.push({name:'PLAYTAKU (HD)', url:`https://playtaku.online/streaming.php?id=${gogoSlug}-episode-${epNum}`, quality:'hd'});
+  // General movie/tv fallback servers (Unreliable for some anime)
+  servers.push({name:'VIDLINK (SD - احتياطي)', url:`https://vidlink.pro/anime/${anime.mal_id}/${epNum}/sub?fallback=true&primaryColor=00a8cc`, quality:'hd'});
+  servers.push({name:'VIDSRC (SD - احتياطي)', url:`https://vidsrc.to/embed/anime/${anime.mal_id}/${epNum}`, quality:'hd'});
 
   state.activeServers = servers;
   

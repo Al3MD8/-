@@ -1,4 +1,21 @@
 // ==========================================================================
+// CONFIGURATION (الإعدادات)
+// أضف أرقام الأنميات (MAL IDs) التي تأكدت من عمل سيرفراتها هنا:
+// ==========================================================================
+const VERIFIED_ANIME_IDS = [
+  21,      // One Piece
+  1735,    // Naruto: Shippuuden
+  31964,   // Boku no Hero Academia
+  52991,   // Sousou no Frieren
+  11061,   // Hunter x Hunter (2011)
+  5114,    // Fullmetal Alchemist: Brotherhood
+  38000,   // Kimetsu no Yaiba
+  16498,   // Shingeki no Kyojin
+  30276,   // One Punch Man
+  40748    // Jujutsu Kaisen
+];
+
+// ==========================================================================
 // APP STATE ENGINE & API INTEGRATION (إدارة حالة التطبيق وربط الواجهات)
 // ==========================================================================
 const state = {
@@ -315,75 +332,64 @@ document.addEventListener('DOMContentLoaded', async () => {
 // API FETCH LOGIC WITH INSTANT CACHING (نظام الكاش فائق السرعة لمنع البطء والتعليق)
 // ==========================================================================
 async function fetchAPIAnime() {
-  const CACHE_KEY = "jikan_anime_cache_v2";
-  const CACHE_TIME_KEY = "jikan_anime_cache_time_v2";
-  const CACHE_DURATION = 2 * 60 * 60 * 1000; // 2 hours
+  const CACHE_KEY = "verified_anime_cache_v3";
+  const CACHE_TIME_KEY = "verified_anime_cache_time_v3";
 
-  const cachedData = localStorage.getItem(CACHE_KEY);
-  const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
-  const now = Date.now();
-
-  let useCache = false;
-  if (cachedData && cachedTime) {
-    if (now - parseInt(cachedTime, 10) < CACHE_DURATION) {
-      useCache = true;
-    }
-  }
-
-  // Load instantly from local storage cache first!
-  if (useCache) {
-    try {
-      const parsed = JSON.parse(cachedData);
-      state.seasonalAnime = parsed.seasonalAnime || [];
-      state.popularAnime = parsed.popularAnime || [];
-      console.log("Anime data loaded instantly from cache!");
-      renderAllContent();
-      return;
-    } catch (e) {
-      console.warn("Failed to parse cache", e);
-    }
-  }
-
-  // Otherwise, load from API
+  let cachedAnime = [];
   try {
-    // 1. Fetch Seasonal first
-    const seasonRes = await fetch(`${API_BASE}/seasons/now?limit=24`);
-    const seasonData = await seasonRes.json();
-    state.seasonalAnime = seasonData.data || [];
+    const cachedData = localStorage.getItem(CACHE_KEY);
+    if (cachedData) cachedAnime = JSON.parse(cachedData);
+  } catch(e) {}
 
-    // Render what we have immediately for speed!
-    renderSeasonalAnime();
-    renderLatestEpisodes();
+  // Filter out any cached anime that are NO LONGER in the VERIFIED list
+  cachedAnime = cachedAnime.filter(a => VERIFIED_ANIME_IDS.includes(a.mal_id));
 
-    // 2. Delay 600ms to avoid Jikan API 429 rate limit errors
-    await new Promise(resolve => setTimeout(resolve, 600));
+  // Determine which anime IDs are missing from the cache
+  const cachedIds = cachedAnime.map(a => a.mal_id);
+  const missingIds = VERIFIED_ANIME_IDS.filter(id => !cachedIds.includes(id));
 
-    // 3. Fetch Top popular
-    const popRes = await fetch(`${API_BASE}/top/anime?filter=bypopularity&limit=36`);
-    const popData = await popRes.json();
-    state.popularAnime = popData.data || [];
+  // Sort initially by ID or title
+  state.popularAnime = [...cachedAnime];
+  state.seasonalAnime = [...cachedAnime].reverse();
 
-    // Save to Cache
-    localStorage.setItem(CACHE_KEY, JSON.stringify({
-      seasonalAnime: state.seasonalAnime,
-      popularAnime: state.popularAnime
-    }));
-    localStorage.setItem(CACHE_TIME_KEY, now.toString());
+  // Render what we have instantly
+  renderAllContent();
 
-    renderAllContent();
-  } catch (error) {
-    console.warn("API Fetch failed, using cache fallback...", error);
-    if (cachedData) {
+  if (missingIds.length > 0) {
+    console.log(`Fetching ${missingIds.length} missing verified animes...`);
+    
+    // Show a small loading indicator
+    if (typeof showToast === 'function') {
+      showToast("جاري تحميل بيانات الأنميات الجديدة... ⏳");
+    }
+
+    const newlyFetched = [];
+    for (const id of missingIds) {
       try {
-        const parsed = JSON.parse(cachedData);
-        state.seasonalAnime = parsed.seasonalAnime || [];
-        state.popularAnime = parsed.popularAnime || [];
-        renderAllContent();
+        const res = await fetch(`${API_BASE}/anime/${id}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.data) newlyFetched.push(data.data);
+        }
+        // Delay to avoid Jikan rate limit (3 req/sec)
+        await new Promise(resolve => setTimeout(resolve, 400));
       } catch (e) {
-        DOM.allAnimeGrid.innerHTML = `<div class="empty-state"><h3>فشل الاتصال بالخادم</h3><p>يرجى التأكد من اتصالك بالإنترنت.</p></div>`;
+         console.warn(`Failed to fetch anime ${id}`, e);
       }
-    } else {
-      DOM.allAnimeGrid.innerHTML = `<div class="empty-state"><h3>فشل الاتصال بالخادم</h3><p>يرجى التأكد من اتصالك بالإنترنت.</p></div>`;
+    }
+
+    if (newlyFetched.length > 0) {
+      const allAnime = [...cachedAnime, ...newlyFetched];
+      localStorage.setItem(CACHE_KEY, JSON.stringify(allAnime));
+      localStorage.setItem(CACHE_TIME_KEY, Date.now().toString());
+      
+      state.popularAnime = [...allAnime];
+      state.seasonalAnime = [...allAnime].reverse();
+      renderAllContent();
+      
+      if (typeof showToast === 'function') {
+        showToast("اكتمل تحميل الأنميات بنجاح! ✅");
+      }
     }
   }
 }
@@ -844,62 +850,53 @@ async function loadActiveEpisodePlayback() {
   // 2. Fallback to default Jikan + Vidlink / Embed.su servers if Witanime failed or isn't available
   if (streamingServers.length === 0) {
     if (state.activeQuality === 'fhd') {
-      streamingServers = [
-        {
-          name: "VIDLINK (FHD - مترجم)",
-          quality: "1080P",
-          url: `https://vidlink.pro/anime/${state.activeAnime.mal_id}/${epNum}/sub?fallback=true&primaryColor=00a8cc`
-        },
-        {
-          name: "VIDLINK (FHD - مدبلج)",
-          quality: "1080P",
-          url: `https://vidlink.pro/anime/${state.activeAnime.mal_id}/${epNum}/dub?fallback=true&primaryColor=00a8cc`
-        }
-      ];
+      streamingServers = [];
       if (state.activeAnime.anilistId) {
         streamingServers.push({
-          name: "EMBED.SU (FHD - سريع)",
+          name: "EMBED.SU (FHD - سيرفر سريع جداً)",
           quality: "1080P",
           url: `https://embed.su/embed/anime/${state.activeAnime.anilistId}/${epNum}`
         });
       }
       streamingServers.push({
-        name: "PLAYTAKU (سيرفر إضافي)",
+        name: "PLAYTAKU (HD - ممتاز)",
         quality: "1080P",
         url: `https://playtaku.online/streaming.php?id=${gogoSlug}-episode-${epNum}`
       });
+      streamingServers.push({
+        name: "EMBTAKU (HD - بديل)",
+        quality: "1080P",
+        url: `https://embtaku.pro/streaming.php?id=${gogoSlug}-episode-${epNum}`
+      });
+      streamingServers.push({
+        name: "VIDLINK (SD - احتياطي)",
+        quality: "1080P",
+        url: `https://vidlink.pro/anime/${state.activeAnime.mal_id}/${epNum}/sub?fallback=true&primaryColor=00a8cc`
+      });
     } else {
-      streamingServers = [
-        {
-          name: "VIDLINK (HD - مترجم)",
-          quality: "720P",
-          url: `https://vidlink.pro/anime/${state.activeAnime.mal_id}/${epNum}/sub?fallback=true&primaryColor=00a8cc`
-        }
-      ];
+      streamingServers = [];
       if (state.activeAnime.anilistId) {
         streamingServers.push({
-          name: "EMBED.SU (HD - سريع)",
+          name: "EMBED.SU (FHD - سيرفر سريع جداً)",
           quality: "720P",
           url: `https://embed.su/embed/anime/${state.activeAnime.anilistId}/${epNum}`
         });
       }
       streamingServers.push({
-        name: "EMBTAKU (سيرفر إضافي)",
+        name: "PLAYTAKU (HD - ممتاز)",
+        quality: "720P",
+        url: `https://playtaku.online/streaming.php?id=${gogoSlug}-episode-${epNum}`
+      });
+      streamingServers.push({
+        name: "EMBTAKU (HD - بديل)",
         quality: "720P",
         url: `https://embtaku.pro/streaming.php?id=${gogoSlug}-episode-${epNum}`
       });
       streamingServers.push({
-        name: "VIDLINK (SD - مترجم)",
-        quality: "480P",
+        name: "VIDLINK (SD - احتياطي)",
+        quality: "720P",
         url: `https://vidlink.pro/anime/${state.activeAnime.mal_id}/${epNum}/sub?fallback=true&primaryColor=00a8cc`
       });
-      if (state.activeAnime.anilistId) {
-        streamingServers.push({
-          name: "EMBED.SU (SD - سريع)",
-          quality: "480P",
-          url: `https://embed.su/embed/anime/${state.activeAnime.anilistId}/${epNum}`
-        });
-      }
       streamingServers.push({
         name: "YOUTUBE (البحث عن الحلقة)",
         quality: "FHD",
